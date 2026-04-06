@@ -1,0 +1,172 @@
+---
+title: Contributing
+description: How to set up the development environment, run tests, and submit pull requests to open-swag-go.
+---
+
+## Development Environment Setup
+
+### Prerequisites
+
+- Go 1.21 or later
+- Git
+
+### Clone and Build
+
+```bash
+git clone https://github.com/gopackx/open-swag-go.git
+cd open-swag-go
+go mod download
+go build ./...
+```
+
+### Project Structure
+
+```
+open-swag-go/
+├── config.go           # Core Config, Docs, Endpoint types
+├── adapters/
+│   ├── chi/            # Chi adapter
+│   ├── gin/            # Gin adapter
+│   ├── echo/           # Echo adapter
+│   ├── fiber/          # Fiber adapter
+│   └── nethttp/        # net/http adapter
+├── pkg/
+│   ├── auth/           # Authentication schemes and playground
+│   ├── tryit/          # Try-it console and code snippets
+│   ├── versioning/     # Version diffing and breaking changes
+│   ├── schema/         # Schema generation from structs
+│   └── examples/       # Example value generation
+├── examples/           # Example applications
+└── docs/               # This documentation site
+```
+
+## Running Tests
+
+### All Tests
+
+```bash
+go test ./...
+```
+
+### Specific Package
+
+```bash
+go test ./pkg/schema/...
+go test ./adapters/chi/...
+```
+
+### With Coverage
+
+```bash
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+```
+
+### Race Detection
+
+```bash
+go test -race ./...
+```
+
+## Submitting Pull Requests
+
+### Workflow
+
+1. Fork the repository
+2. Create a feature branch from `main`:
+   ```bash
+   git checkout -b feature/my-feature
+   ```
+3. Make your changes
+4. Run tests and linting:
+   ```bash
+   go test ./...
+   go vet ./...
+   ```
+5. Commit with a conventional commit message (see below)
+6. Push and open a pull request against `main`
+
+### PR Requirements
+
+- All tests must pass
+- New code must include tests
+- No decrease in test coverage
+- Code must pass `go vet` and `golangci-lint`
+- PR description should explain what and why
+
+## Code Style
+
+### Go Conventions
+
+- Follow [Effective Go](https://go.dev/doc/effective-go) and the [Go Code Review Comments](https://go.dev/wiki/CodeReviewComments)
+- Use `gofmt` for formatting (enforced by CI)
+- Run `golangci-lint` before committing:
+  ```bash
+  golangci-lint run
+  ```
+
+### Naming
+
+- Use descriptive names: `GenerateSpec` not `GenSpec`
+- Exported types and functions must have doc comments
+- Interface names should describe behavior: `Validator`, `Generator`
+
+### Error Handling
+
+- Return errors instead of panicking
+- Wrap errors with context: `fmt.Errorf("failed to generate schema for %s: %w", typeName, err)`
+- Use sentinel errors for expected conditions
+
+## Commit Message Conventions
+
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+### Types
+
+| Type | Description |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation changes |
+| `test` | Adding or updating tests |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `chore` | Build process or tooling changes |
+| `perf` | Performance improvement |
+
+### Examples
+
+```
+feat(auth): add OAuth2 PKCE flow support
+fix(schema): handle pointer types in nested structs
+docs(adapters): add Fiber middleware example
+test(versioning): add breaking change detection tests
+```
+
+### Scope
+
+Use the package or directory name as the scope: `auth`, `schema`, `chi`, `gin`, `echo`, `fiber`, `nethttp`, `tryit`, `versioning`, `examples`, `docs`.
+
+## Documentation Contributions
+
+The docs site lives in the `docs/` directory and uses Fumadocs with MDX.
+
+### Running the Docs Site Locally
+
+```bash
+cd docs
+bun install
+bun run dev
+```
+
+### Adding a New Page
+
+1. Create an `.mdx` file in the appropriate `content/docs/` subdirectory
+2. Add frontmatter with `title` and `description`
+3. Add the page slug to the directory's `meta.json`
+4. Write your content using MDX

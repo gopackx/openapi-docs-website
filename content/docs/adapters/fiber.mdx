@@ -1,0 +1,69 @@
+---
+title: Fiber Adapter
+description: Integrate open-swag-go with the Fiber web framework for Express-style API documentation.
+---
+
+# Fiber Adapter
+
+The Fiber adapter mounts open-swag-go documentation routes onto a [Fiber](https://gofiber.io) app or group. Fiber is an Express-inspired framework built on top of fasthttp for high throughput.
+
+## Installation
+
+```bash
+go get github.com/gopackx/open-swag-go/adapters/fiber
+```
+
+## Mount
+
+`Mount` registers documentation routes on a Fiber app at the given path prefix.
+
+```go title="main.go"
+package main
+
+import (
+	"github.com/gofiber/fiber/v2"
+	openswag "github.com/gopackx/open-swag-go"
+	swagfiber "github.com/gopackx/open-swag-go/adapters/fiber"
+)
+
+func main() {
+	app := fiber.New()
+
+	docs := openswag.New(openswag.Config{
+		Title:   "My API",
+		Version: "1.0.0",
+	})
+
+	docs.Add(openswag.Endpoint{
+		Method:  "GET",
+		Path:    "/health",
+		Summary: "Health check",
+		Responses: []openswag.Response{
+			{Status: 200, Description: "OK"},
+		},
+	})
+
+	swagfiber.Mount(app, "/docs", docs)
+
+	app.Listen(":8080")
+}
+```
+
+## MountGroup
+
+`MountGroup` attaches documentation routes to a Fiber `Group`. This lets you share middleware like authentication or rate limiting with the docs routes.
+
+```go title="main.go"
+api := app.Group("/api/v1")
+api.Use(authMiddleware)
+
+swagfiber.MountGroup(api, "/docs", docs)
+// Docs served at /api/v1/docs
+```
+
+## Notes
+
+- Fiber is built on fasthttp, not `net/http`. You must use the Fiber adapter — standard `http.Handler` middleware won't work here.
+- Fiber's middleware (CORS, limiter, logger) applies to docs routes when using `MountGroup`.
+- The adapter serves both the Scalar UI and the OpenAPI JSON spec under the given prefix.
+- If you're migrating from Express.js, Fiber's API will feel familiar.

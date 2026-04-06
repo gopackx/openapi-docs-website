@@ -1,0 +1,194 @@
+---
+title: Schema Package
+description: API reference for pkg/schema — Go struct to OpenAPI schema generation, validation, type mappings, and tag parsing.
+---
+
+# Schema Package
+
+`pkg/schema` converts Go structs into OpenAPI 3.x JSON Schema definitions. It reads struct tags to infer field names, descriptions, examples, formats, and validation rules.
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/schema"
+```
+
+## Schema
+
+The generated JSON Schema representation of a Go type.
+
+```go
+type Schema struct {
+    Type        string              // OpenAPI type: "string", "integer", "number", "boolean", "array", "object"
+    Format      string              // Format hint: "int64", "float", "date-time", "email", etc.
+    Properties  map[string]*Schema  // Nested object properties
+    Items       *Schema             // Array element schema
+    Required    []string            // Required property names
+    Description string              // Field description
+    Example     interface{}         // Example value
+    Enum        []interface{}       // Allowed values
+    Nullable    bool                // Whether null is accepted
+    Ref         string              // $ref pointer for shared schemas
+}
+```
+
+### Generate
+
+```go
+func Generate(v interface{}) *Schema
+```
+
+Accepts any Go value (typically a struct) and returns its OpenAPI schema. Nested structs, slices, maps, and pointers are resolved recursively.
+
+```go
+type User struct {
+    ID    int64  `json:"id"    description:"Unique identifier" example:"42"`
+    Name  string `json:"name"  description:"Display name"      example:"Alice"`
+    Email string `json:"email" description:"Email address"     format:"email"`
+}
+
+s := schema.Generate(User{})
+// s.Type == "object"
+// s.Properties["id"].Type == "integer"
+// s.Properties["id"].Format == "int64"
+```
+
+## Validator
+
+Validates a Go value against its generated schema, checking required fields and format constraints.
+
+```go
+type Validator struct {
+    // unexported fields
+}
+
+func NewValidator() *Validator
+```
+
+### Methods
+
+```go
+func (v *Validator) Validate(value interface{}, s *Schema) []ValidationError
+```
+
+Returns a slice of validation errors. An empty slice means the value is valid.
+
+```go
+func (v *Validator) ValidateJSON(data []byte, s *Schema) []ValidationError
+```
+
+Validates raw JSON bytes against a schema.
+
+### ValidationError
+
+```go
+type ValidationError struct {
+    Field   string // JSON path to the invalid field, e.g. "user.email"
+    Message string // Human-readable error message
+    Code    string // Machine-readable code: "required", "format", "type", "enum"
+}
+```
+
+### Usage
+
+```go
+validator := schema.NewValidator()
+s := schema.Generate(User{})
+
+errs := validator.ValidateJSON([]byte(`{"name": "Alice"}`), s)
+for _, e := range errs {
+    fmt.Printf("%s: %s\n", e.Field, e.Message)
+}
+```
+
+## Type Mappings
+
+The schema generator maps Go types to OpenAPI types automatically.
+
+| Go Type | OpenAPI Type | OpenAPI Format |
+|---------|-------------|----------------|
+| `string` | `string` | — |
+| `bool` | `boolean` | — |
+| `int` | `integer` | `int32` |
+| `int64` | `integer` | `int64` |
+| `float32` | `number` | `float` |
+| `float64` | `number` | `double` |
+| `[]T` | `array` | — (items = schema of T) |
+| `map[string]T` | `object` | — (additionalProperties = schema of T) |
+| `*T` | schema of T | — (nullable: true) |
+| `time.Time` | `string` | `date-time` |
+| `uuid.UUID` | `string` | `uuid` |
+
+## Tag Parsing
+
+The schema generator reads the following struct tags to enrich the generated schema.
+
+| Tag | Purpose | Example |
+|-----|---------|---------|
+| `json` | Field name and omitempty | `json:"email,omitempty"` |
+| `description` | Field description | `description:"User email"` |
+| `example` | Example value | `example:"alice@example.com"` |
+| `format` | OpenAPI format override | `format:"email"` |
+| `swagger` | Swagger-specific overrides | `swagger:"required"` |
+| `validate` | Validation rules | `validate:"required,email"` |
+| `binding` | Gin-style binding rules | `binding:"required"` |
+| `enum` | Allowed values (comma-separated) | `enum:"active,inactive,banned"` |
+
+### ParseTags
+
+```go
+func ParseTags(field reflect.StructField) TagInfo
+```
+
+Extracts all recognised tags from a struct field.
+
+```go
+type TagInfo struct {
+    Name        string   // JSON field name
+    Description string   // From description tag
+    Example     string   // From example tag
+    Format      string   // From format tag
+    Required    bool     // From swagger:"required" or validate:"required"
+    OmitEmpty   bool     // From json:",omitempty"
+    Enum        []string // From enum tag
+}
+```
+
+### Usage
+
+```go
+type Product struct {
+    ID     int64   `json:"id"     description:"Product ID"   example:"1"`
+    Name   string  `json:"name"   description:"Product name" example:"Widget" validate:"required"`
+    Price  float64 `json:"price"  description:"Unit price"   example:"9.99"   format:"double"`
+    Status string  `json:"status" description:"Availability" enum:"active,discontinued"`
+}
+
+s := schema.Generate(Product{})
+// s.Properties["status"].Enum == ["active", "discontinued"]
+// s.Properties["price"].Format == "double"
+// s.Required == ["name"]
+```
+
+## Quick Example
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+
+    "github.com/gopackx/open-swag-go/pkg/schema"
+)
+
+type CreateOrderRequest struct {
+    ProductID int64  `json:"product_id" description:"Product to order" example:"42" validate:"required"`
+    Quantity  int    `json:"quantity"   description:"Number of items"  example:"2"  validate:"required"`
+    Note      string `json:"note"       description:"Optional note"    example:"Gift wrap please"`
+}
+
+func main() {
+    s := schema.Generate(CreateOrderRequest{})
+    data, _ := json.MarshalIndent(s, "", "  ")
+    fmt.Println(string(data))
+}
+```

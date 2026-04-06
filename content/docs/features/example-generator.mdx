@@ -1,0 +1,178 @@
+---
+title: Example Generator
+description: Automatically generate realistic example values for your API docs using smart field name heuristics and struct tags.
+---
+
+# Example Generator
+
+Open-swag-go can generate realistic example values for your API schemas automatically. The `examples` package uses a combination of struct tags, field name heuristics, and a built-in `Faker` to produce meaningful sample data without manual effort.
+
+## How It Works
+
+When a struct field has an `example` tag, that value is used directly. When it doesn't, the generator inspects the field name and type to produce a sensible default. A field named `email` gets an email address, `phone` gets a phone number, and so on.
+
+```go title="auto_examples.go"
+type User struct {
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Phone     string `json:"phone"`
+	Age       int    `json:"age"`
+	CreatedAt string `json:"created_at"`
+}
+// Generated example:
+// {
+//   "name": "John Smith",
+//   "email": "john.smith@example.com",
+//   "phone": "+1-555-0100",
+//   "age": 30,
+//   "created_at": "2024-01-15T09:30:00Z"
+// }
+```
+
+## Generator
+
+The `Generator` struct controls how examples are produced:
+
+```go title="generator_type.go"
+import "github.com/gopackx/open-swag-go/pkg/examples"
+
+gen := examples.NewGenerator(examples.Config{
+	UseDefaults: true,  // Fall back to type-based defaults
+	UseFaker:    true,  // Enable smart field name heuristics
+	Seed:        42,    // Fixed seed for reproducible output
+})
+
+example := gen.Generate(User{})
+```
+
+### Config options
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `UseDefaults` | `bool` | Use type-based defaults when no tag or heuristic matches |
+| `UseFaker` | `bool` | Enable the Faker for field name heuristics |
+| `Seed` | `int64` | Random seed for reproducible examples |
+
+## Faker
+
+The `Faker` provides realistic values based on field names. It matches common naming patterns and returns appropriate sample data.
+
+```go title="faker_usage.go"
+faker := examples.NewFaker(42)
+
+faker.Name()      // "Alice Johnson"
+faker.Email()     // "alice.johnson@example.com"
+faker.Phone()     // "+1-555-0142"
+faker.UUID()      // "550e8400-e29b-41d4-a716-446655440000"
+faker.URL()       // "https://example.com/resource"
+faker.IPv4()      // "192.168.1.42"
+faker.Sentence()  // "The quick brown fox jumps over the lazy dog."
+```
+
+## Smart Field Name Heuristics
+
+The generator matches field names (case-insensitive) to categories and picks an appropriate example value:
+
+| Field Name Pattern | Example Value |
+|--------------------|---------------|
+| `name`, `username`, `full_name` | `"John Smith"` |
+| `email`, `mail` | `"john.smith@example.com"` |
+| `phone`, `mobile`, `tel` | `"+1-555-0100"` |
+| `url`, `website`, `link` | `"https://example.com"` |
+| `address`, `street` | `"123 Main St"` |
+| `city` | `"Springfield"` |
+| `state` | `"IL"` |
+| `zip`, `postal_code` | `"62701"` |
+| `country` | `"US"` |
+| `id`, `uuid` | `"550e8400-e29b-41d4-..."` |
+| `created_at`, `updated_at` | `"2024-01-15T09:30:00Z"` |
+| `price`, `amount`, `cost` | `29.99` |
+| `description`, `bio`, `summary` | `"A brief description."` |
+| `password`, `secret` | `"********"` |
+| `token` | `"eyJhbGciOiJIUzI1NiIs..."` |
+| `ip`, `ip_address` | `"192.168.1.1"` |
+
+When no heuristic matches, the generator falls back to type-based defaults (`""` for strings, `0` for numbers, `false` for booleans).
+
+## Explicit Examples with Tags
+
+Struct tags always take priority over heuristics. Use the `example` tag for precise control:
+
+```go title="explicit_examples.go"
+type Product struct {
+	Name  string  `json:"name"  example:"Wireless Headphones"`
+	Price float64 `json:"price" example:"79.99"`
+	SKU   string  `json:"sku"   example:"WH-1000XM5"`
+}
+```
+
+You can mix explicit tags and auto-generation. Fields with `example` tags use the tag value; fields without tags use heuristics or defaults.
+
+## Full Example
+
+A complete setup with the example generator and an endpoint:
+
+```go title="full_example_gen.go"
+package main
+
+import (
+	"net/http"
+
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/examples"
+	adapter "github.com/gopackx/open-swag-go/adapters/nethttp"
+)
+
+type CreateUserRequest struct {
+	Name  string `json:"name"`
+	Email string `json:"email"`
+	Phone string `json:"phone"`
+	Age   int    `json:"age" example:"25"`
+}
+
+type UserResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	CreatedAt string `json:"created_at"`
+}
+
+func main() {
+	gen := examples.NewGenerator(examples.Config{
+		UseFaker: true,
+		Seed:     42,
+	})
+
+	docs := openswag.Config{
+		Title:   "User API",
+		Version: "1.0.0",
+		ExampleGenerator: gen,
+		Endpoints: []openswag.Endpoint{
+			{
+				Method:  "POST",
+				Path:    "/users",
+				Summary: "Create a user",
+				Tags:    []string{"Users"},
+				RequestBody: &openswag.RequestBody{
+					ContentType: "application/json",
+					Required:    true,
+					Schema:      CreateUserRequest{},
+				},
+				Responses: []openswag.Response{
+					{
+						StatusCode:  201,
+						Description: "User created",
+						ContentType: "application/json",
+						Schema:      UserResponse{},
+					},
+				},
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	adapter.Mount(mux, docs)
+
+	http.ListenAndServe(":8080", mux)
+}
+```

@@ -1,0 +1,236 @@
+---
+title: Schema Generation
+description: Generate OpenAPI schemas automatically from Go structs using struct tags for field names, types, validation, and documentation.
+---
+
+# Schema Generation
+
+Open-swag-go reads your Go structs and turns them into OpenAPI 3.x schema definitions. Struct tags control field names, descriptions, examples, formats, and validation rules — so the generated spec stays in sync with your actual types.
+
+## How It Works
+
+When you pass a Go struct as the `Schema` field on a `RequestBody`, `Response`, or `Parameter`, open-swag-go inspects the struct's fields and tags at runtime. Each exported field becomes a property in the resulting OpenAPI schema object.
+
+```go title="basic_schema.go"
+type CreateUserRequest struct {
+	Name  string `json:"name"  description:"Full name of the user" example:"Alice Smith"`
+	Email string `json:"email" description:"Email address"         example:"alice@example.com"`
+	Age   int    `json:"age"   description:"Age in years"          example:"30"`
+}
+```
+
+This struct produces the following OpenAPI schema:
+
+```yaml title="generated_schema.yaml"
+type: object
+properties:
+  name:
+    type: string
+    description: Full name of the user
+    example: Alice Smith
+  email:
+    type: string
+    description: Email address
+    example: alice@example.com
+  age:
+    type: integer
+    description: Age in years
+    example: 30
+```
+
+## Supported Struct Tags
+
+### `json`
+
+Controls the property name in the generated schema. Follows standard `encoding/json` conventions.
+
+```go
+type Product struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	SKU       string `json:"sku"`
+	IsActive  bool   `json:"is_active"`
+	Internal  string `json:"-"`          // omitted from schema
+	CreatedAt string `json:"created_at,omitempty"`
+}
+```
+
+- `json:"field_name"` — sets the property name
+- `json:"-"` — excludes the field from the schema
+- `json:"name,omitempty"` — marks the field as optional
+
+### `swagger`
+
+Provides OpenAPI-specific overrides like marking a field as required or setting the type explicitly.
+
+```go
+type Order struct {
+	ID     int64  `json:"id"     swagger:"required"`
+	Status string `json:"status" swagger:"required,enum=pending|processing|shipped|delivered"`
+	Notes  string `json:"notes"  swagger:"nullable"`
+}
+```
+
+| Value | Effect |
+|-------|--------|
+| `required` | Adds the field to the schema's `required` array |
+| `enum=a\|b\|c` | Sets allowed values |
+| `nullable` | Sets `nullable: true` on the property |
+| `readOnly` | Sets `readOnly: true` |
+| `writeOnly` | Sets `writeOnly: true` |
+
+### `description`
+
+Sets the `description` field on the schema property.
+
+```go
+type Pagination struct {
+	Page  int `json:"page"  description:"Current page number (1-based)"`
+	Limit int `json:"limit" description:"Maximum items per page"`
+	Total int `json:"total" description:"Total number of matching items"`
+}
+```
+
+### `example`
+
+Provides an example value shown in the generated docs.
+
+```go
+type Address struct {
+	Street  string `json:"street"  example:"123 Main St"`
+	City    string `json:"city"    example:"Springfield"`
+	State   string `json:"state"   example:"IL"`
+	ZipCode string `json:"zip_code" example:"62701"`
+}
+```
+
+### `format`
+
+Sets the OpenAPI `format` hint for the property. Common formats include `date-time`, `email`, `uri`, `uuid`, `ipv4`, and `int64`.
+
+```go
+type Event struct {
+	ID        string `json:"id"         format:"uuid"`
+	Email     string `json:"email"      format:"email"`
+	StartTime string `json:"start_time" format:"date-time"`
+	Website   string `json:"website"    format:"uri"`
+}
+```
+
+### `validate`
+
+Maps validation rules to OpenAPI schema constraints.
+
+```go
+type CreateProductRequest struct {
+	Name     string  `json:"name"      validate:"required,min=1,max=200"`
+	Price    float64 `json:"price"     validate:"required,gt=0"`
+	Quantity int     `json:"quantity"  validate:"gte=0,lte=10000"`
+	SKU      string  `json:"sku"       validate:"required,len=10"`
+}
+```
+
+| Rule | OpenAPI Constraint |
+|------|--------------------|
+| `required` | Adds to `required` array |
+| `min=N` / `max=N` | `minLength` / `maxLength` (strings) |
+| `gt=N` / `gte=N` | `exclusiveMinimum` / `minimum` (numbers) |
+| `lt=N` / `lte=N` | `exclusiveMaximum` / `maximum` (numbers) |
+| `len=N` | `minLength` and `maxLength` set to N |
+| `oneof=a b c` | `enum: [a, b, c]` |
+
+### `binding`
+
+Works like `validate` but is recognized from frameworks like Gin. Open-swag-go treats `binding` tags the same as `validate`.
+
+```go
+type LoginRequest struct {
+	Username string `json:"username" binding:"required,min=3,max=50"`
+	Password string `json:"password" binding:"required,min=8"`
+}
+```
+
+## Type Mapping
+
+Open-swag-go maps Go types to OpenAPI types automatically:
+
+| Go Type | OpenAPI Type | OpenAPI Format |
+|---------|-------------|----------------|
+| `string` | `string` | — |
+| `int`, `int32` | `integer` | `int32` |
+| `int64` | `integer` | `int64` |
+| `float32` | `number` | `float` |
+| `float64` | `number` | `double` |
+| `bool` | `boolean` | — |
+| `[]T` | `array` | items: T |
+| `struct` | `object` | — |
+| `map[string]T` | `object` | additionalProperties: T |
+| `time.Time` | `string` | `date-time` |
+| `*T` | same as T | `nullable: true` |
+| `uuid.UUID` | `string` | `uuid` |
+
+## Practical Examples
+
+### Tagged struct with validation
+
+```go title="tagged_struct.go"
+type CreateOrderRequest struct {
+	CustomerID string        `json:"customer_id" swagger:"required"   description:"Customer UUID"    format:"uuid"      example:"550e8400-e29b-41d4-a716-446655440000"`
+	Items      []OrderItem   `json:"items"       swagger:"required"   description:"Line items"       validate:"required,min=1"`
+	Notes      string        `json:"notes"                            description:"Optional notes"   example:"Leave at front door"`
+	Priority   string        `json:"priority"    swagger:"enum=low|normal|high" description:"Order priority" example:"normal"`
+}
+
+type OrderItem struct {
+	ProductID string `json:"product_id" swagger:"required" description:"Product UUID" format:"uuid"`
+	Quantity  int    `json:"quantity"   swagger:"required" description:"Number of units" validate:"gte=1,lte=100" example:"2"`
+}
+```
+
+### Using schemas in endpoints
+
+Pass your tagged structs as `Schema` values on request bodies and responses:
+
+```go title="schema_endpoint.go"
+openswag.Endpoint{
+	Method:  "POST",
+	Path:    "/orders",
+	Summary: "Create an order",
+	Tags:    []string{"Orders"},
+	RequestBody: &openswag.RequestBody{
+		Description: "Order to create",
+		ContentType: "application/json",
+		Required:    true,
+		Schema:      CreateOrderRequest{},
+	},
+	Responses: []openswag.Response{
+		{
+			StatusCode:  201,
+			Description: "Order created",
+			ContentType: "application/json",
+			Schema:      OrderResponse{},
+		},
+		{StatusCode: 400, Description: "Validation error"},
+	},
+}
+```
+
+### Nested structs
+
+Nested structs are resolved recursively. Each nested type becomes its own schema object.
+
+```go title="nested_structs.go"
+type Company struct {
+	Name    string  `json:"name"    description:"Company name"    example:"Acme Corp"`
+	Address Address `json:"address" description:"Company address"`
+}
+
+type Address struct {
+	Street string `json:"street" example:"123 Main St"`
+	City   string `json:"city"   example:"Springfield"`
+	State  string `json:"state"  example:"IL"`
+	Zip    string `json:"zip"    example:"62701"`
+}
+```
+
+The generated schema references `Address` as a nested object under `Company`, keeping the spec clean and reusable.

@@ -1,0 +1,11 @@
+{
+  "title": "Adapters",
+  "pages": [
+    "overview",
+    "chi",
+    "gin",
+    "echo",
+    "fiber",
+    "net-http"
+  ]
+}

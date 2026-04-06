@@ -1,0 +1,104 @@
+---
+title: Security Best Practices
+description: Secure your OpenAPI documentation with authentication, credential management, and CORS configuration.
+---
+
+## Protect Your Documentation
+
+Never expose internal API documentation publicly in production. Use `DocsAuth` to require authentication before serving the Scalar UI and the OpenAPI spec.
+
+```go title="main.go"
+docs := openswag.New(openswag.Config{
+    Title:   "Internal API",
+    Version: "1.0.0",
+    DocsAuth: &openswag.DocsAuth{
+        Type:     "basic",
+        Username: os.Getenv("DOCS_USER"),
+        Password: os.Getenv("DOCS_PASS"),
+    },
+})
+```
+
+### Use Environment Variables for Credentials
+
+Never hardcode usernames, passwords, or API keys in your source code. Always read them from environment variables or a secrets manager.
+
+```go
+// Good
+auth := &openswag.DocsAuth{
+    Username: os.Getenv("DOCS_USER"),
+    Password: os.Getenv("DOCS_PASS"),
+}
+
+// Bad — never do this
+auth := &openswag.DocsAuth{
+    Username: "admin",
+    Password: "secret123",
+}
+```
+
+## Credential Persistence
+
+When using the auth playground, control how credentials are stored on the client side. Disable persistence in shared or public environments.
+
+```go
+playground := auth.NewPlaygroundConfig(
+    auth.WithPersistence(false), // Don't store tokens in localStorage
+)
+```
+
+For internal tools where convenience matters, you can enable persistence with a short TTL:
+
+```go
+playground := auth.NewPlaygroundConfig(
+    auth.WithPersistence(true),
+    auth.WithPersistenceTTL(15 * time.Minute),
+)
+```
+
+## CORS Proxy Configuration
+
+If your API and documentation are on different origins, the try-it console needs a CORS proxy to make requests. Configure this explicitly rather than using a wildcard `Access-Control-Allow-Origin`.
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:   "My API",
+    Version: "1.0.0",
+    UIConfig: openswag.UIConfig{
+        CORSProxyURL: "https://cors-proxy.internal.example.com",
+    },
+})
+```
+
+### CORS Checklist
+
+- Set specific allowed origins instead of `*`
+- Restrict allowed methods to what your API actually uses
+- Set `Access-Control-Max-Age` to reduce preflight requests
+- Never expose sensitive headers in `Access-Control-Expose-Headers`
+
+## API Key Protection
+
+For machine-to-machine access to your docs, use API key authentication:
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:   "Partner API",
+    Version: "1.0.0",
+    DocsAuth: &openswag.DocsAuth{
+        Type:      "apikey",
+        HeaderName: "X-Docs-Key",
+        APIKey:     os.Getenv("DOCS_API_KEY"),
+    },
+})
+```
+
+## Summary
+
+| Practice | Recommendation |
+|----------|---------------|
+| Docs authentication | Always enable in production |
+| Credentials | Use environment variables |
+| Credential persistence | Disable for public environments |
+| CORS | Use specific origins, not wildcards |
+| API keys | Rotate regularly, store in secrets manager |

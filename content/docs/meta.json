@@ -1,0 +1,22 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "---Getting Started---",
+    "getting-started",
+    "---Features---",
+    "features",
+    "---Adapters---",
+    "adapters",
+    "---API Reference---",
+    "api-reference",
+    "---Examples---",
+    "examples",
+    "---Guides---",
+    "guides",
+    "---",
+    "faq",
+    "troubleshooting",
+    "contributing"
+  ]
+}

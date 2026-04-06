@@ -1,0 +1,200 @@
+---
+title: Examples Package
+description: API reference for pkg/examples — smart example value generation from Go struct fields and tags.
+---
+
+# Examples Package
+
+`pkg/examples` generates realistic example values for OpenAPI schemas by inspecting Go struct field names, types, and tags. It powers the automatic example population in the docs UI.
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/examples"
+```
+
+## Generator
+
+Produces example values for Go types.
+
+```go
+type Generator struct {
+    // unexported fields
+}
+
+func New(opts ...Option) *Generator
+```
+
+### Methods
+
+```go
+func (g *Generator) Generate(v interface{}) interface{}
+```
+
+Accepts any Go value and returns a populated copy with realistic example data. Struct fields with an `example` tag use the tag value; other fields are inferred from the field name and type.
+
+```go
+func (g *Generator) GenerateJSON(v interface{}) ([]byte, error)
+```
+
+Same as `Generate` but returns the result as JSON bytes.
+
+```go
+func (g *Generator) GenerateMap(v interface{}) map[string]interface{}
+```
+
+Returns the example as a flat map, useful for injecting into OpenAPI spec examples.
+
+### Usage
+
+```go
+type User struct {
+    ID    int64  `json:"id"    example:"42"`
+    Name  string `json:"name"  example:"Alice"`
+    Email string `json:"email"`
+}
+
+gen := examples.New()
+ex := gen.Generate(User{})
+// ex == User{ID: 42, Name: "Alice", Email: "alice@example.com"}
+```
+
+## Faker
+
+Low-level value generator that produces realistic data based on field name heuristics.
+
+```go
+type Faker struct {
+    // unexported fields
+}
+
+func NewFaker(opts ...Option) *Faker
+```
+
+### Methods
+
+```go
+func (f *Faker) Value(fieldName string, fieldType reflect.Type) interface{}
+```
+
+Returns a realistic value for the given field name and Go type. The field name is matched against built-in heuristics (see table below).
+
+```go
+func (f *Faker) String(fieldName string) string
+```
+
+Returns a string value based on the field name.
+
+```go
+func (f *Faker) Int(fieldName string) int64
+```
+
+Returns an integer value based on the field name.
+
+```go
+func (f *Faker) Float(fieldName string) float64
+```
+
+Returns a float value based on the field name.
+
+### Field Name Heuristics
+
+The Faker recognises common field names and generates appropriate values.
+
+| Field Name Pattern | Generated Value |
+|--------------------|----------------|
+| `id`, `*_id` | Sequential integer (1, 2, 3…) |
+| `name`, `*_name` | Realistic name, e.g. "Alice Johnson" |
+| `email`, `*_email` | Email address, e.g. "alice@example.com" |
+| `phone`, `*_phone` | Phone number, e.g. "+1-555-0100" |
+| `url`, `*_url`, `website` | URL, e.g. "https://example.com" |
+| `address`, `*_address` | Street address |
+| `city` | City name |
+| `country` | Country name |
+| `zip`, `postal_code` | Postal code |
+| `price`, `amount`, `*_price` | Monetary value, e.g. 29.99 |
+| `created_at`, `updated_at`, `*_at` | ISO 8601 timestamp |
+| `description`, `bio`, `summary` | Lorem-style sentence |
+| `status` | "active" |
+| `enabled`, `active`, `is_*` | `true` |
+
+### Usage
+
+```go
+faker := examples.NewFaker()
+
+email := faker.String("email")       // "alice@example.com"
+price := faker.Float("price")        // 29.99
+userID := faker.Int("user_id")       // 1
+```
+
+## Config
+
+Functional options for customising the generator and faker behaviour.
+
+```go
+type Option func(*config)
+```
+
+```go
+func WithSeed(seed int64) Option
+```
+
+Sets a fixed random seed for deterministic output. Useful for snapshot tests.
+
+```go
+func WithLocale(locale string) Option
+```
+
+Sets the locale for generated strings (e.g. `"en"`, `"de"`, `"ja"`). Defaults to `"en"`.
+
+```go
+func WithCustomField(pattern string, value interface{}) Option
+```
+
+Registers a custom heuristic. When a field name matches the pattern, the provided value is used.
+
+### Usage
+
+```go
+gen := examples.New(
+    examples.WithSeed(12345),
+    examples.WithCustomField("tenant_id", "org_abc123"),
+)
+
+type Order struct {
+    TenantID  string  `json:"tenant_id"`
+    ProductID int64   `json:"product_id" example:"7"`
+    Quantity  int     `json:"quantity"`
+}
+
+ex := gen.Generate(Order{})
+// ex.TenantID == "org_abc123"  (custom field)
+// ex.ProductID == 7            (from example tag)
+// ex.Quantity == 1             (default int)
+```
+
+## Quick Example
+
+```go
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+
+    "github.com/gopackx/open-swag-go/pkg/examples"
+)
+
+type CreateUserRequest struct {
+    Name    string `json:"name"    example:"Bob"`
+    Email   string `json:"email"`
+    Age     int    `json:"age"     example:"30"`
+    Country string `json:"country"`
+}
+
+func main() {
+    gen := examples.New(examples.WithSeed(1))
+    data, _ := gen.GenerateJSON(CreateUserRequest{})
+    fmt.Println(string(data))
+    // {"name":"Bob","email":"bob@example.com","age":30,"country":"United States"}
+}
+```

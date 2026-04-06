@@ -1,0 +1,188 @@
+---
+title: Auth Playground
+description: Configure an interactive authentication playground that lets API consumers test credentials directly in the docs UI.
+---
+
+# Auth Playground
+
+The auth playground adds an interactive panel to your Scalar docs UI where API consumers can enter credentials, test authentication flows, and see the resulting headers — without leaving the documentation. It supports credential persistence so users don't have to re-enter tokens on every page load.
+
+## PlaygroundConfig
+
+`PlaygroundConfig` controls the playground behavior and is passed to the top-level `Config`.
+
+```go title="playground_config.go"
+type PlaygroundConfig struct {
+	Enabled           bool            // Enable the auth playground panel
+	Schemes           []auth.Scheme   // Auth schemes available in the playground
+	CredentialStore   CredentialStore // Where to persist entered credentials
+	ShowRawHeaders    bool            // Show the generated Authorization header
+	AutoAttach        bool            // Auto-attach credentials to try-it requests
+}
+```
+
+### Minimal setup
+
+```go title="basic_playground.go"
+import (
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/auth"
+)
+
+cfg := openswag.Config{
+	Title:   "My API",
+	Version: "1.0.0",
+	Playground: auth.PlaygroundConfig{
+		Enabled: true,
+		Schemes: []auth.Scheme{auth.PredefinedBearer},
+	},
+}
+```
+
+This gives you a playground panel with a single bearer token input. Credentials are not persisted by default.
+
+## Functional Options
+
+For more control, use functional options instead of setting struct fields directly. Each option returns a modifier that configures one aspect of the playground.
+
+```go title="functional_options.go"
+playground := auth.NewPlayground(
+	auth.WithSchemes(auth.PredefinedBearer, apiKeyScheme),
+	auth.WithCredentialStore(auth.LocalStorage),
+	auth.WithShowRawHeaders(true),
+	auth.WithAutoAttach(true),
+)
+
+cfg := openswag.Config{
+	Title:      "My API",
+	Version:    "1.0.0",
+	Playground: playground,
+}
+```
+
+### Available options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `WithSchemes(schemes...)` | Auth schemes shown in the playground | none |
+| `WithCredentialStore(store)` | Where credentials are persisted | `auth.None` |
+| `WithShowRawHeaders(bool)` | Display the raw `Authorization` header value | `false` |
+| `WithAutoAttach(bool)` | Auto-attach credentials to try-it console requests | `false` |
+
+## Credential Persistence
+
+The `CredentialStore` type controls where the playground saves credentials in the browser. Three options are available:
+
+```go title="credential_stores.go"
+auth.LocalStorage    // Persist across browser sessions (survives tab close)
+auth.SessionStorage  // Persist for the current tab only (cleared on close)
+auth.None            // Never persist — credentials are cleared on page reload
+```
+
+### Choosing a store
+
+Use `LocalStorage` for internal or development docs where convenience matters:
+
+```go
+auth.NewPlayground(
+	auth.WithSchemes(auth.PredefinedBearer),
+	auth.WithCredentialStore(auth.LocalStorage),
+)
+```
+
+Use `SessionStorage` for shared environments where credentials should not outlive the browser tab:
+
+```go
+auth.NewPlayground(
+	auth.WithSchemes(auth.PredefinedBearer),
+	auth.WithCredentialStore(auth.SessionStorage),
+)
+```
+
+Use `None` for public-facing docs or when security policy prohibits client-side credential storage:
+
+```go
+auth.NewPlayground(
+	auth.WithSchemes(auth.PredefinedBearer),
+	auth.WithCredentialStore(auth.None),
+)
+```
+
+## Multiple Auth Schemes
+
+The playground can present several auth schemes at once. Users pick the one that matches their integration.
+
+```go title="multi_scheme_playground.go"
+bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
+	Description:  "JWT access token",
+	BearerFormat: "JWT",
+})
+
+apiKeyScheme := auth.APIKeyAuth(auth.APIKeyAuthConfig{
+	Name:        "X-API-Key",
+	In:          "header",
+	Description: "API key for machine-to-machine access",
+})
+
+playground := auth.NewPlayground(
+	auth.WithSchemes(bearerScheme, apiKeyScheme),
+	auth.WithCredentialStore(auth.SessionStorage),
+	auth.WithAutoAttach(true),
+)
+```
+
+## Full Example
+
+Putting it all together — a config with bearer and API key auth, session-scoped persistence, raw header preview, and auto-attach enabled:
+
+```go title="full_example.go"
+package main
+
+import (
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/auth"
+	"github.com/gopackx/open-swag-go/adapters/nethttp"
+	"net/http"
+)
+
+func main() {
+	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
+		Description:  "JWT access token",
+		BearerFormat: "JWT",
+	})
+
+	playground := auth.NewPlayground(
+		auth.WithSchemes(bearerScheme),
+		auth.WithCredentialStore(auth.SessionStorage),
+		auth.WithShowRawHeaders(true),
+		auth.WithAutoAttach(true),
+	)
+
+	cfg := openswag.Config{
+		Title:       "My API",
+		Version:     "1.0.0",
+		Description: "API with auth playground",
+		Playground:  playground,
+	}
+
+	endpoints := []openswag.Endpoint{
+		{
+			Method:   "GET",
+			Path:     "/users/me",
+			Summary:  "Get current user",
+			Tags:     []string{"Users"},
+			Security: []auth.Scheme{bearerScheme},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "User profile", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Unauthorized"},
+			},
+		},
+	}
+
+	docs := openswag.New(cfg, endpoints...)
+	mux := http.NewServeMux()
+	nethttp.Mount(mux, "/docs", docs)
+
+	http.ListenAndServe(":8080", mux)
+}
+```

@@ -1,0 +1,68 @@
+---
+title: Gin Adapter
+description: Integrate open-swag-go with the Gin web framework for high-performance API documentation.
+---
+
+# Gin Adapter
+
+The Gin adapter mounts open-swag-go documentation routes onto a [Gin](https://github.com/gin-gonic/gin) engine or route group. Gin is a high-performance HTTP framework with a martini-like API.
+
+## Installation
+
+```bash
+go get github.com/gopackx/open-swag-go/adapters/gin
+```
+
+## Mount
+
+`Mount` registers documentation routes on a Gin engine at the given path prefix.
+
+```go title="main.go"
+package main
+
+import (
+	"github.com/gin-gonic/gin"
+	openswag "github.com/gopackx/open-swag-go"
+	swaggin "github.com/gopackx/open-swag-go/adapters/gin"
+)
+
+func main() {
+	r := gin.Default()
+
+	docs := openswag.New(openswag.Config{
+		Title:   "My API",
+		Version: "1.0.0",
+	})
+
+	docs.Add(openswag.Endpoint{
+		Method:  "GET",
+		Path:    "/health",
+		Summary: "Health check",
+		Responses: []openswag.Response{
+			{Status: 200, Description: "OK"},
+		},
+	})
+
+	swaggin.Mount(r, "/docs", docs)
+
+	r.Run(":8080")
+}
+```
+
+## MountGroup
+
+`MountGroup` attaches documentation routes to a Gin `RouterGroup`. This is useful when you want to share middleware (e.g. authentication) across the docs routes.
+
+```go title="main.go"
+api := r.Group("/api/v1")
+api.Use(authMiddleware())
+
+swaggin.MountGroup(api, "/docs", docs)
+// Docs served at /api/v1/docs
+```
+
+## Notes
+
+- Gin uses its own `gin.Context` rather than `net/http` directly, so make sure you import the Gin adapter — not the net/http one.
+- `MountGroup` is the preferred approach when your docs live under a versioned or authenticated route group.
+- The adapter handles both the Scalar UI HTML page and the OpenAPI JSON spec endpoint.

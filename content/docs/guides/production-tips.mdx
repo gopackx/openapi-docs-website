@@ -1,0 +1,125 @@
+---
+title: Production Performance Tips
+description: Optimize open-swag-go for production with spec caching, static generation, and CDN deployment.
+---
+
+## Spec Caching
+
+By default, open-swag-go generates the OpenAPI spec on every request. In production, enable caching to serve the spec from memory after the first generation.
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:   "My API",
+    Version: "1.0.0",
+    Cache:   true, // Cache the generated spec in memory
+})
+```
+
+This is safe when your endpoints are registered at startup and don't change at runtime. The spec is generated once on the first request and served from memory for all subsequent requests.
+
+## Static Spec Generation
+
+For maximum performance, generate the OpenAPI spec at build time and serve it as a static JSON file. This eliminates runtime generation entirely.
+
+```go title="cmd/generate-spec/main.go"
+package main
+
+import (
+    "encoding/json"
+    "os"
+
+    openswag "github.com/gopackx/open-swag-go"
+)
+
+func main() {
+    docs := openswag.New(openswag.Config{
+        Title:   "My API",
+        Version: "1.0.0",
+    })
+
+    // Register all your endpoints
+    docs.AddEndpoint(/* ... */)
+
+    spec, err := docs.GenerateSpec()
+    if err != nil {
+        panic(err)
+    }
+
+    data, _ := json.MarshalIndent(spec, "", "  ")
+    os.WriteFile("openapi.json", data, 0644)
+}
+```
+
+Then serve the static file:
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:      "My API",
+    Version:    "1.0.0",
+    StaticSpec: "openapi.json", // Serve from file instead of generating
+})
+```
+
+## CDN Deployment
+
+Serve the Scalar UI assets and the OpenAPI spec through a CDN for faster load times globally.
+
+### Recommended Setup
+
+1. Generate the spec at build time (see above)
+2. Upload `openapi.json` to your CDN (S3, CloudFront, Cloudflare R2, etc.)
+3. Configure the Scalar UI to load the spec from the CDN URL
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:   "My API",
+    Version: "1.0.0",
+    UIConfig: openswag.UIConfig{
+        SpecURL: "https://cdn.example.com/api/openapi.json",
+    },
+})
+```
+
+### Cache Headers
+
+Set appropriate cache headers on your spec file:
+
+```
+Cache-Control: public, max-age=3600, s-maxage=86400
+```
+
+- `max-age=3600` — browsers cache for 1 hour
+- `s-maxage=86400` — CDN caches for 24 hours
+
+## Minimize Endpoint Registration
+
+Only register endpoints that should be documented. Use build tags or configuration to exclude internal/debug endpoints from production docs.
+
+```go
+docs.AddEndpoint(openswag.Endpoint{
+    Method:      "GET",
+    Path:        "/api/users",
+    Summary:     "List users",
+    Description: "Returns a paginated list of users",
+    Tags:        []string{"Users"},
+})
+
+// Don't register debug endpoints in production docs
+if os.Getenv("INCLUDE_DEBUG_DOCS") == "true" {
+    docs.AddEndpoint(openswag.Endpoint{
+        Method:  "GET",
+        Path:    "/debug/pprof",
+        Summary: "Profiling endpoint",
+        Tags:    []string{"Debug"},
+    })
+}
+```
+
+## Summary
+
+| Optimization | Impact | Effort |
+|-------------|--------|--------|
+| Spec caching | Eliminates repeated generation | Low |
+| Static spec generation | Zero runtime overhead | Medium |
+| CDN deployment | Faster global load times | Medium |
+| Selective endpoint registration | Smaller spec, faster parsing | Low |

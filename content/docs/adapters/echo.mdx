@@ -1,0 +1,68 @@
+---
+title: Echo Adapter
+description: Integrate open-swag-go with the Echo web framework for minimalist API documentation.
+---
+
+# Echo Adapter
+
+The Echo adapter mounts open-swag-go documentation routes onto an [Echo](https://echo.labstack.com) instance or group. Echo is a minimalist Go framework with a rich middleware ecosystem.
+
+## Installation
+
+```bash
+go get github.com/gopackx/open-swag-go/adapters/echo
+```
+
+## Mount
+
+`Mount` registers documentation routes on an Echo instance at the given path prefix.
+
+```go title="main.go"
+package main
+
+import (
+	"github.com/labstack/echo/v4"
+	openswag "github.com/gopackx/open-swag-go"
+	swagecho "github.com/gopackx/open-swag-go/adapters/echo"
+)
+
+func main() {
+	e := echo.New()
+
+	docs := openswag.New(openswag.Config{
+		Title:   "My API",
+		Version: "1.0.0",
+	})
+
+	docs.Add(openswag.Endpoint{
+		Method:  "GET",
+		Path:    "/health",
+		Summary: "Health check",
+		Responses: []openswag.Response{
+			{Status: 200, Description: "OK"},
+		},
+	})
+
+	swagecho.Mount(e, "/docs", docs)
+
+	e.Logger.Fatal(e.Start(":8080"))
+}
+```
+
+## MountGroup
+
+`MountGroup` attaches documentation routes to an Echo `Group`. Use this when docs should share middleware with other routes in the group.
+
+```go title="main.go"
+api := e.Group("/api/v1")
+api.Use(middleware.BasicAuth(validateUser))
+
+swagecho.MountGroup(api, "/docs", docs)
+// Docs served at /api/v1/docs
+```
+
+## Notes
+
+- Echo uses its own `echo.Context`, so use the Echo adapter — not the net/http one.
+- Echo's built-in middleware (CORS, logging, recovery) applies to mounted docs routes when using `MountGroup`.
+- The adapter registers both the Scalar UI page and the OpenAPI JSON spec endpoint under the given prefix.

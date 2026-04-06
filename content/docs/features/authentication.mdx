@@ -1,0 +1,275 @@
+---
+title: Authentication
+description: Secure your API endpoints with BearerAuth, BasicAuth, APIKeyAuth, CookieAuth, and OAuth2 authentication schemes.
+---
+
+# Authentication
+
+Open-swag-go supports five authentication schemes out of the box. Each scheme generates the correct OpenAPI 3.x security definition and can be attached to individual endpoints or applied globally.
+
+## BearerAuth
+
+Bearer authentication sends a token (typically a JWT) in the `Authorization` header. This is the most common scheme for modern APIs.
+
+```go title="bearer_auth.go"
+import "github.com/gopackx/open-swag-go/pkg/auth"
+
+bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
+	Description: "JWT access token",
+	BearerFormat: "JWT",
+})
+```
+
+The generated OpenAPI security scheme looks like:
+
+```yaml
+securitySchemes:
+  BearerAuth:
+    type: http
+    scheme: bearer
+    bearerFormat: JWT
+    description: JWT access token
+```
+
+### Attaching to an endpoint
+
+```go
+openswag.Endpoint{
+	Method:   "GET",
+	Path:     "/users/me",
+	Summary:  "Get current user profile",
+	Tags:     []string{"Users"},
+	Security: []auth.Scheme{bearerScheme},
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "User profile", ContentType: "application/json"},
+		{StatusCode: 401, Description: "Unauthorized"},
+	},
+}
+```
+
+## BasicAuth
+
+Basic authentication sends a base64-encoded `username:password` pair in the `Authorization` header. Useful for internal services or simple admin endpoints.
+
+```go title="basic_auth.go"
+basicScheme := auth.BasicAuth(auth.BasicAuthConfig{
+	Description: "Username and password",
+})
+```
+
+```go
+openswag.Endpoint{
+	Method:   "POST",
+	Path:     "/admin/reset-cache",
+	Summary:  "Reset application cache",
+	Tags:     []string{"Admin"},
+	Security: []auth.Scheme{basicScheme},
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "Cache cleared"},
+		{StatusCode: 401, Description: "Invalid credentials"},
+	},
+}
+```
+
+## APIKeyAuth
+
+API key authentication sends a key in a header or query parameter. You choose the location and parameter name.
+
+### Header-based API key
+
+```go title="apikey_header.go"
+apiKeyScheme := auth.APIKeyAuth(auth.APIKeyAuthConfig{
+	Name:        "X-API-Key",
+	In:          "header",
+	Description: "API key passed in the X-API-Key header",
+})
+```
+
+### Query parameter API key
+
+```go title="apikey_query.go"
+apiKeyQueryScheme := auth.APIKeyAuth(auth.APIKeyAuthConfig{
+	Name:        "api_key",
+	In:          "query",
+	Description: "API key passed as a query parameter",
+})
+```
+
+```go
+openswag.Endpoint{
+	Method:   "GET",
+	Path:     "/data/export",
+	Summary:  "Export data as CSV",
+	Tags:     []string{"Data"},
+	Security: []auth.Scheme{apiKeyScheme},
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "CSV file", ContentType: "text/csv"},
+		{StatusCode: 403, Description: "Invalid API key"},
+	},
+}
+```
+
+## CookieAuth
+
+Cookie authentication reads a session token from a browser cookie. This is common for web applications where the frontend and API share the same domain.
+
+```go title="cookie_auth.go"
+cookieScheme := auth.CookieAuth(auth.CookieAuthConfig{
+	Name:        "session_id",
+	Description: "Session cookie set after login",
+})
+```
+
+```go
+openswag.Endpoint{
+	Method:   "GET",
+	Path:     "/dashboard",
+	Summary:  "Get dashboard data",
+	Tags:     []string{"Dashboard"},
+	Security: []auth.Scheme{cookieScheme},
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "Dashboard payload", ContentType: "application/json"},
+		{StatusCode: 401, Description: "Session expired"},
+	},
+}
+```
+
+## OAuth2
+
+OAuth2 supports multiple authorization flows. Open-swag-go lets you configure authorization code and client credentials flows (or both).
+
+### Authorization Code flow
+
+The authorization code flow is used by web and mobile apps where the user grants access through a browser redirect.
+
+```go title="oauth2_authcode.go"
+oauth2Scheme := auth.OAuth2(auth.OAuth2Config{
+	Description: "OAuth2 with authorization code flow",
+	Flows: auth.OAuth2Flows{
+		AuthorizationCode: &auth.AuthorizationCodeFlow{
+			AuthorizationURL: "https://auth.example.com/authorize",
+			TokenURL:         "https://auth.example.com/token",
+			Scopes: map[string]string{
+				"read:users":  "Read user profiles",
+				"write:users": "Create and update users",
+				"admin":       "Full administrative access",
+			},
+		},
+	},
+})
+```
+
+### Client Credentials flow
+
+The client credentials flow is used for server-to-server communication where no user interaction is involved.
+
+```go title="oauth2_client_creds.go"
+oauth2ClientScheme := auth.OAuth2(auth.OAuth2Config{
+	Description: "OAuth2 with client credentials flow",
+	Flows: auth.OAuth2Flows{
+		ClientCredentials: &auth.ClientCredentialsFlow{
+			TokenURL: "https://auth.example.com/token",
+			Scopes: map[string]string{
+				"service:read":  "Read service data",
+				"service:write": "Write service data",
+			},
+		},
+	},
+})
+```
+
+### Combined flows
+
+You can enable both flows on the same scheme:
+
+```go title="oauth2_combined.go"
+oauth2Combined := auth.OAuth2(auth.OAuth2Config{
+	Description: "OAuth2 supporting multiple flows",
+	Flows: auth.OAuth2Flows{
+		AuthorizationCode: &auth.AuthorizationCodeFlow{
+			AuthorizationURL: "https://auth.example.com/authorize",
+			TokenURL:         "https://auth.example.com/token",
+			Scopes: map[string]string{
+				"read":  "Read access",
+				"write": "Write access",
+			},
+		},
+		ClientCredentials: &auth.ClientCredentialsFlow{
+			TokenURL: "https://auth.example.com/token",
+			Scopes: map[string]string{
+				"service": "Service-level access",
+			},
+		},
+	},
+})
+```
+
+## Predefined Security Constants
+
+Open-swag-go ships with predefined security constants for the most common configurations. These save you from creating scheme objects manually when the defaults are good enough.
+
+```go title="predefined.go"
+import "github.com/gopackx/open-swag-go/pkg/auth"
+
+// Predefined schemes with sensible defaults
+auth.PredefinedBearer     // BearerAuth with "JWT" format
+auth.PredefinedBasic      // BasicAuth with default description
+auth.PredefinedAPIKey     // APIKeyAuth in "X-API-Key" header
+auth.PredefinedCookieAuth // CookieAuth with "session" cookie name
+```
+
+Use them directly on endpoints:
+
+```go
+openswag.Endpoint{
+	Method:   "DELETE",
+	Path:     "/users/{id}",
+	Summary:  "Delete a user",
+	Tags:     []string{"Users"},
+	Security: []auth.Scheme{auth.PredefinedBearer},
+	Responses: []openswag.Response{
+		{StatusCode: 204, Description: "User deleted"},
+		{StatusCode: 401, Description: "Unauthorized"},
+		{StatusCode: 404, Description: "User not found"},
+	},
+}
+```
+
+## Combining Multiple Schemes
+
+You can require multiple authentication schemes on a single endpoint. When you pass multiple schemes, the client must satisfy all of them (logical AND).
+
+```go title="multi_auth.go"
+openswag.Endpoint{
+	Method:  "POST",
+	Path:    "/admin/users",
+	Summary: "Create admin user",
+	Tags:    []string{"Admin"},
+	Security: []auth.Scheme{
+		auth.PredefinedBearer,
+		apiKeyScheme,
+	},
+	Responses: []openswag.Response{
+		{StatusCode: 201, Description: "Admin user created"},
+		{StatusCode: 401, Description: "Unauthorized"},
+		{StatusCode: 403, Description: "Forbidden"},
+	},
+}
+```
+
+## Global Security
+
+To apply an authentication scheme to every endpoint, set it on the `Config` instead of individual endpoints:
+
+```go title="global_security.go"
+cfg := openswag.Config{
+	Title:       "My API",
+	Version:     "1.0.0",
+	Description: "API with global bearer auth",
+	Security:    []auth.Scheme{auth.PredefinedBearer},
+}
+
+docs := openswag.New(cfg, endpoints...)
+```
+
+Individual endpoints can still override or extend the global security by setting their own `Security` field.

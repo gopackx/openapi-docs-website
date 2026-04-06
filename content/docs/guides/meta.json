@@ -1,0 +1,10 @@
+{
+  "title": "Guides",
+  "pages": [
+    "best-practices",
+    "production-tips",
+    "ci-cd",
+    "typescript-types",
+    "migration"
+  ]
+}

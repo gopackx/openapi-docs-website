@@ -1,0 +1,124 @@
+---
+title: FAQ
+description: Frequently asked questions about installing, configuring, and using open-swag-go.
+---
+
+## Installation
+
+### What Go version do I need?
+
+open-swag-go requires Go 1.21 or later.
+
+### How do I install it?
+
+```bash
+go get github.com/gopackx/open-swag-go
+```
+
+### Do I need to install framework adapters separately?
+
+Yes. Each adapter is a separate import:
+
+```go
+import chiadapter "github.com/gopackx/open-swag-go/adapters/chi"
+```
+
+The adapters are included in the same module, so `go get` pulls them all in — you just import the one you need.
+
+## Configuration
+
+### What's the minimum configuration to get started?
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:   "My API",
+    Version: "1.0.0",
+})
+```
+
+Then mount it on your router and add endpoints.
+
+### Can I serve docs at a custom path?
+
+Yes, pass the path when mounting:
+
+```go
+chiadapter.Mount(r, "/api-docs", docs)
+```
+
+### How do I change the UI theme?
+
+Set the `Theme` field in `UIConfig`:
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:   "My API",
+    Version: "1.0.0",
+    UIConfig: openswag.UIConfig{
+        Theme:    "blue",
+        DarkMode: true,
+    },
+})
+```
+
+Available themes: `purple`, `blue`, `green`, `light`.
+
+### Can I use multiple authentication schemes?
+
+Yes. Pass multiple schemes to `SecuritySchemes`:
+
+```go
+docs := openswag.New(openswag.Config{
+    SecuritySchemes: []auth.Scheme{
+        auth.BearerAuth("jwt", "JWT Authentication"),
+        auth.APIKeyAuth("api-key", "API Key", "X-API-Key", "header"),
+    },
+})
+```
+
+## Usage
+
+### How do I add an endpoint?
+
+Use `docs.AddEndpoint()` with an `Endpoint` struct:
+
+```go
+docs.AddEndpoint(openswag.Endpoint{
+    Method:  "GET",
+    Path:    "/api/users",
+    Summary: "List users",
+    Tags:    []string{"Users"},
+})
+```
+
+### Can I generate the spec without running a server?
+
+Yes. Use `docs.GenerateSpec()` to get the spec as a Go struct, then marshal it to JSON:
+
+```go
+spec, _ := docs.GenerateSpec()
+data, _ := json.MarshalIndent(spec, "", "  ")
+os.WriteFile("openapi.json", data, 0644)
+```
+
+### Does open-swag-go support OpenAPI 3.1?
+
+open-swag-go generates OpenAPI 3.0.3 specs by default. OpenAPI 3.1 support is planned for a future release.
+
+### Can I use open-swag-go with a framework not listed in the adapters?
+
+Yes. Use the `net/http` adapter, which works with any framework that supports `http.Handler`:
+
+```go
+import nethttpadapter "github.com/gopackx/open-swag-go/adapters/nethttp"
+
+nethttpadapter.Mount(mux, "/docs", docs)
+```
+
+### How do I hide certain endpoints from the docs?
+
+Only endpoints you explicitly register with `docs.AddEndpoint()` appear in the spec. If you don't register an endpoint, it won't be documented.
+
+### Can I generate TypeScript types from my spec?
+
+Yes. Export your spec to a file and use tools like `openapi-typescript`, `openapi-fetch`, or `orval`. See the [TypeScript Types guide](/docs/guides/typescript-types) for details.

@@ -1,0 +1,280 @@
+---
+title: Core Package
+description: API reference for the root open-swag-go package — Config, Docs, Endpoint, Parameter, RequestBody, Response, and supporting types.
+---
+
+# Core Package
+
+The root `openswag` package contains every type you need to define an OpenAPI spec and serve interactive documentation from your Go application.
+
+## Config
+
+Top-level configuration passed to `openswag.New()`.
+
+```go
+type Config struct {
+    Info        Info        // API metadata (title, version, description)
+    Servers     []Server    // Server URLs shown in the docs UI
+    Tags        []Tag       // Logical groupings for endpoints
+    UIConfig    UIConfig    // Scalar UI appearance settings
+    DocsAuth    *DocsAuth   // Optional password/API-key protection for the docs page
+    BasePath    string      // URL prefix where docs are mounted, e.g. "/docs"
+}
+```
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Info` | `Info` | API title, version, description, contact, and license |
+| `Servers` | `[]Server` | Base URLs displayed in the server dropdown |
+| `Tags` | `[]Tag` | Grouping tags that organise endpoints in the sidebar |
+| `UIConfig` | `UIConfig` | Theme, layout, and Scalar UI options |
+| `DocsAuth` | `*DocsAuth` | Protect the docs page with basic auth or an API key |
+| `BasePath` | `string` | Mount path prefix for the documentation routes |
+
+## Docs
+
+`Docs` is the main handle returned by `openswag.New()`. It holds the compiled spec and serves the UI.
+
+```go
+func New(cfg Config, endpoints ...Endpoint) *Docs
+```
+
+```go
+type Docs struct {
+    // unexported fields
+}
+
+func (d *Docs) Spec() []byte          // Returns the JSON OpenAPI spec
+func (d *Docs) Handler() http.Handler // Returns an http.Handler that serves the docs UI
+```
+
+### Usage
+
+```go
+docs := openswag.New(cfg, endpoints...)
+
+// Serve with net/http
+http.Handle("/docs/", docs.Handler())
+```
+
+## Endpoint
+
+Describes a single API operation.
+
+```go
+type Endpoint struct {
+    Method      string        // HTTP method: GET, POST, PUT, PATCH, DELETE
+    Path        string        // URL path, e.g. "/users/{id}"
+    Summary     string        // Short one-line description
+    Description string        // Detailed explanation (Markdown supported)
+    Tags        []string      // Grouping tags for the sidebar
+    Parameters  []Parameter   // Path, query, and header parameters
+    RequestBody *RequestBody  // Request body (nil for GET/DELETE)
+    Responses   []Response    // Possible responses
+    Security    []string      // Security scheme names applied to this endpoint
+    Deprecated  bool          // Mark the endpoint as deprecated
+}
+```
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Method` | `string` | HTTP verb — `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
+| `Path` | `string` | Route path with `{param}` placeholders |
+| `Summary` | `string` | One-line summary shown in the sidebar |
+| `Description` | `string` | Longer description, supports Markdown |
+| `Tags` | `[]string` | Groups the endpoint under one or more sidebar sections |
+| `Parameters` | `[]Parameter` | Path, query, and header parameters |
+| `RequestBody` | `*RequestBody` | Payload definition for write operations |
+| `Responses` | `[]Response` | Status-code keyed response definitions |
+| `Security` | `[]string` | Names of security schemes this endpoint requires |
+| `Deprecated` | `bool` | Flags the endpoint as deprecated in the spec |
+
+## Parameter
+
+Describes a single path, query, or header parameter.
+
+```go
+type Parameter struct {
+    Name        string      // Parameter name, e.g. "id"
+    In          string      // Location: "path", "query", or "header"
+    Description string      // Human-readable description
+    Required    bool        // Whether the parameter is mandatory
+    Schema      interface{} // Go type used for schema generation
+}
+```
+
+## RequestBody
+
+Describes the payload for POST, PUT, and PATCH operations.
+
+```go
+type RequestBody struct {
+    Description string      // What the body represents
+    ContentType string      // MIME type, e.g. "application/json"
+    Required    bool        // Whether the body is mandatory
+    Schema      interface{} // Go struct for schema generation
+}
+```
+
+## Response
+
+Describes a possible response for an endpoint.
+
+```go
+type Response struct {
+    StatusCode  int         // HTTP status code
+    Description string      // What this response means
+    ContentType string      // MIME type (optional)
+    Schema      interface{} // Go struct for schema generation (optional)
+}
+```
+
+## UIConfig
+
+Controls the Scalar-based documentation UI appearance.
+
+```go
+type UIConfig struct {
+    Theme       string // Predefined theme: "purple", "blue", "green", "light"
+    DarkMode    bool   // Enable dark mode by default
+    CustomCSS   string // Raw CSS injected into the docs page
+    HideModels  bool   // Hide the Models section in the sidebar
+    Layout      string // Layout style: "modern" (default) or "classic"
+}
+```
+
+## DocsAuth
+
+Protects the documentation page with credentials.
+
+```go
+type DocsAuth struct {
+    Username string // Basic auth username
+    Password string // Basic auth password
+    APIKey   string // Alternative: protect with an API key header
+}
+```
+
+When both `Username`/`Password` and `APIKey` are set, basic auth takes precedence.
+
+## Info
+
+API metadata rendered in the docs header.
+
+```go
+type Info struct {
+    Title          string   // API title
+    Version        string   // Semantic version, e.g. "1.0.0"
+    Description    string   // Markdown description
+    TermsOfService string   // URL to terms of service
+    Contact        *Contact // Maintainer contact info
+    License        *License // License details
+}
+```
+
+## Server
+
+A base URL entry shown in the server dropdown.
+
+```go
+type Server struct {
+    URL         string // Base URL, e.g. "https://api.example.com"
+    Description string // Label for this server
+}
+```
+
+## Tag
+
+A logical grouping for endpoints.
+
+```go
+type Tag struct {
+    Name        string // Tag name referenced by Endpoint.Tags
+    Description string // Displayed in the sidebar
+}
+```
+
+## Contact
+
+Maintainer contact information embedded in `Info`.
+
+```go
+type Contact struct {
+    Name  string // Contact name
+    URL   string // Contact URL
+    Email string // Contact email
+}
+```
+
+## License
+
+License details embedded in `Info`.
+
+```go
+type License struct {
+    Name string // License name, e.g. "MIT"
+    URL  string // URL to the full license text
+}
+```
+
+## Helper Functions
+
+### ParametersFromStruct
+
+Generates a `[]Parameter` slice from a tagged Go struct.
+
+```go
+func ParametersFromStruct(v interface{}) []Parameter
+```
+
+```go
+type ListParams struct {
+    Page  int    `query:"page"  description:"Page number"  example:"1"`
+    Limit int    `query:"limit" description:"Items per page" example:"20"`
+}
+
+params := openswag.ParametersFromStruct(ListParams{})
+```
+
+## Quick Example
+
+```go
+package main
+
+import (
+    "net/http"
+    openswag "github.com/gopackx/open-swag-go"
+)
+
+func main() {
+    cfg := openswag.Config{
+        Info: openswag.Info{
+            Title:   "Pet Store",
+            Version: "1.0.0",
+        },
+        Servers: []openswag.Server{
+            {URL: "http://localhost:8080", Description: "Local"},
+        },
+    }
+
+    endpoints := []openswag.Endpoint{
+        {
+            Method:  "GET",
+            Path:    "/pets",
+            Summary: "List all pets",
+            Tags:    []string{"Pets"},
+            Responses: []openswag.Response{
+                {StatusCode: 200, Description: "A list of pets", ContentType: "application/json"},
+            },
+        },
+    }
+
+    docs := openswag.New(cfg, endpoints...)
+    http.Handle("/docs/", docs.Handler())
+    http.ListenAndServe(":8080", nil)
+}
+```

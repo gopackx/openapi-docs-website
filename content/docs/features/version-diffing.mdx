@@ -1,0 +1,331 @@
+---
+title: Version Diffing
+description: Compare OpenAPI spec versions, detect breaking changes, and generate changelogs and migration guides automatically.
+---
+
+# Version Diffing
+
+The versioning package compares two OpenAPI specs and reports every difference — additions, removals, modifications, and breaking changes. It can also generate human-readable changelogs and migration guides so your API consumers know exactly what changed between releases.
+
+## Differ
+
+`Differ` is the entry point for comparing two OpenAPI specs. Pass it the old and new spec (as parsed OpenAPI documents) and it returns a `Diff` describing every change.
+
+```go title="differ.go"
+type Differ struct {
+	IgnoreDescriptions bool // Skip description-only changes
+	IgnoreExtensions   bool // Skip x- extension changes
+}
+```
+
+### Basic comparison
+
+```go title="basic_diff.go"
+import "github.com/gopackx/open-swag-go/pkg/versioning"
+
+differ := versioning.Differ{}
+diff, err := differ.Compare(oldSpec, newSpec)
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Printf("Total changes: %d\n", len(diff.Changes))
+fmt.Printf("Breaking changes: %d\n", len(diff.BreakingChanges))
+```
+
+### Filtering noise
+
+Description edits and vendor extension tweaks rarely matter to API consumers. Filter them out to focus on structural changes:
+
+```go title="filtered_diff.go"
+differ := versioning.Differ{
+	IgnoreDescriptions: true,
+	IgnoreExtensions:   true,
+}
+
+diff, _ := differ.Compare(oldSpec, newSpec)
+```
+
+## Diff
+
+`Diff` is the result of a comparison. It contains every detected change grouped by type.
+
+```go title="diff.go"
+type Diff struct {
+	Changes         []Change         // All changes (additions, removals, modifications)
+	BreakingChanges []BreakingChange // Subset of changes that break backwards compatibility
+	Summary         string           // Human-readable summary line
+}
+```
+
+### Inspecting changes
+
+```go title="inspect_changes.go"
+diff, _ := differ.Compare(oldSpec, newSpec)
+
+for _, c := range diff.Changes {
+	fmt.Printf("[%s] %s: %s\n", c.Type, c.Path, c.Description)
+}
+// [added] /users/{id}/avatar: New endpoint
+// [modified] /users: Added query parameter "role"
+// [removed] /legacy/users: Endpoint removed
+```
+
+## BreakingChange
+
+`BreakingChange` represents a single backwards-incompatible change detected between spec versions.
+
+```go title="breaking_change.go"
+type BreakingChange struct {
+	Path        string // OpenAPI path affected (e.g. "/users/{id}")
+	Method      string // HTTP method (e.g. "GET")
+	Type        string // Category: "endpoint-removed", "field-removed", "type-changed", etc.
+	Description string // Human-readable explanation
+	Severity    string // "error" or "warning"
+}
+```
+
+### Checking for breaking changes
+
+```go title="check_breaking.go"
+diff, _ := differ.Compare(oldSpec, newSpec)
+
+if len(diff.BreakingChanges) > 0 {
+	fmt.Println("⚠️  Breaking changes detected:")
+	for _, bc := range diff.BreakingChanges {
+		fmt.Printf("  [%s] %s %s — %s\n", bc.Severity, bc.Method, bc.Path, bc.Description)
+	}
+}
+// ⚠️  Breaking changes detected:
+//   [error] DELETE /users/{id} — Endpoint removed
+//   [warning] GET /users — Response field "legacy_id" removed
+```
+
+## Spec Change Examples
+
+Below are before/after examples showing common spec changes and how the differ reports them.
+
+### Removing an endpoint
+
+**Before**
+
+```yaml title="v1_spec.yaml"
+paths:
+  /users:
+    get:
+      summary: List users
+  /users/{id}:
+    get:
+      summary: Get user
+    delete:
+      summary: Delete user
+```
+
+**After**
+
+```yaml title="v2_spec.yaml"
+paths:
+  /users:
+    get:
+      summary: List users
+  /users/{id}:
+    get:
+      summary: Get user
+    # DELETE /users/{id} removed
+```
+
+The differ reports this as a breaking change with type `endpoint-removed`.
+
+### Adding a required field
+
+**Before**
+
+```yaml title="v1_create_user.yaml"
+components:
+  schemas:
+    CreateUser:
+      type: object
+      required: [name, email]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+```
+
+**After**
+
+```yaml title="v2_create_user.yaml"
+components:
+  schemas:
+    CreateUser:
+      type: object
+      required: [name, email, role]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, user, viewer]
+```
+
+Adding a new required field to a request body is a breaking change — existing clients don't send `role`.
+
+### Changing a response type
+
+**Before**
+
+```yaml title="v1_response.yaml"
+paths:
+  /users/{id}:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  id:
+                    type: integer
+```
+
+**After**
+
+```yaml title="v2_response.yaml"
+paths:
+  /users/{id}:
+    get:
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+```
+
+Changing `id` from `integer` to `string` is a breaking change with type `type-changed`.
+
+## ChangelogGenerator
+
+`ChangelogGenerator` takes a `Diff` and produces a human-readable changelog in Markdown format.
+
+```go title="changelog_generator.go"
+type ChangelogGenerator struct {
+	GroupByTag bool   // Group changes under API tags
+	Format     string // "markdown" (default) or "plain"
+}
+```
+
+### Generating a changelog
+
+```go title="generate_changelog.go"
+gen := versioning.ChangelogGenerator{
+	GroupByTag: true,
+	Format:     "markdown",
+}
+
+changelog, err := gen.Generate(diff)
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Println(changelog)
+// ## Breaking Changes
+//
+// ### Users
+// - **DELETE /users/{id}** — Endpoint removed
+// - **GET /users** — Response field "legacy_id" removed
+//
+// ## Additions
+//
+// ### Users
+// - **POST /users/{id}/avatar** — New endpoint for uploading user avatars
+```
+
+## MigrationGenerator
+
+`MigrationGenerator` takes a `Diff` and produces a step-by-step migration guide that tells API consumers exactly what they need to change in their client code.
+
+```go title="migration_generator.go"
+type MigrationGenerator struct {
+	IncludeExamples bool   // Include code examples in the guide
+	Format          string // "markdown" (default) or "plain"
+}
+```
+
+### Generating a migration guide
+
+```go title="generate_migration.go"
+gen := versioning.MigrationGenerator{
+	IncludeExamples: true,
+	Format:          "markdown",
+}
+
+guide, err := gen.Generate(diff)
+if err != nil {
+	log.Fatal(err)
+}
+
+fmt.Println(guide)
+// ## Migration Guide: v1 → v2
+//
+// ### 1. Remove calls to DELETE /users/{id}
+// This endpoint has been removed. Use the new soft-delete endpoint instead:
+// `POST /users/{id}/deactivate`
+//
+// ### 2. Add "role" field to CreateUser requests
+// The "role" field is now required when creating a user.
+// Valid values: "admin", "user", "viewer"
+```
+
+## Full Example
+
+A complete program that loads two spec files, compares them, and outputs a changelog and migration guide:
+
+```go title="full_version_diff.go"
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/gopackx/open-swag-go/pkg/versioning"
+)
+
+func main() {
+	oldSpec, err := os.ReadFile("api-v1.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	newSpec, err := os.ReadFile("api-v2.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	differ := versioning.Differ{
+		IgnoreDescriptions: true,
+	}
+
+	diff, err := differ.Compare(oldSpec, newSpec)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Changes: %d, Breaking: %d\n", len(diff.Changes), len(diff.BreakingChanges))
+
+	changelogGen := versioning.ChangelogGenerator{GroupByTag: true}
+	changelog, _ := changelogGen.Generate(diff)
+	fmt.Println(changelog)
+
+	migrationGen := versioning.MigrationGenerator{IncludeExamples: true}
+	guide, _ := migrationGen.Generate(diff)
+	fmt.Println(guide)
+}
+```

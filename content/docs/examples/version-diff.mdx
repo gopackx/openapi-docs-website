@@ -1,0 +1,254 @@
+---
+title: Version Diffing Example
+description: Detect breaking changes between API spec versions and generate changelogs and migration guides automatically.
+---
+
+# Version Diffing Example
+
+This example shows how to use the `versioning` package to compare two OpenAPI specs, detect breaking changes, and generate a changelog and migration guide. This is useful in CI pipelines to catch backwards-incompatible changes before they ship.
+
+## The Full Program
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/auth"
+	"github.com/gopackx/open-swag-go/pkg/versioning"
+)
+
+func main() {
+	// --- v1 spec ---
+	v1Config := openswag.Config{
+		Info: openswag.Info{
+			Title:   "Task API",
+			Version: "1.0.0",
+		},
+	}
+
+	v1Endpoints := []openswag.Endpoint{
+		{
+			Method:  "GET",
+			Path:    "/tasks",
+			Summary: "List tasks",
+			Tags:    []string{"Tasks"},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Task list", ContentType: "application/json"},
+			},
+		},
+		{
+			Method:  "POST",
+			Path:    "/tasks",
+			Summary: "Create a task",
+			Tags:    []string{"Tasks"},
+			RequestBody: &openswag.RequestBody{
+				Description: "Task to create",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 201, Description: "Task created", ContentType: "application/json"},
+			},
+		},
+		{
+			Method:  "DELETE",
+			Path:    "/tasks/{id}",
+			Summary: "Delete a task",
+			Tags:    []string{"Tasks"},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "Task ID"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 204, Description: "Task deleted"},
+			},
+		},
+	}
+
+	v1Docs := openswag.New(v1Config, v1Endpoints...)
+
+	// --- v2 spec ---
+	v2Config := openswag.Config{
+		Info: openswag.Info{
+			Title:   "Task API",
+			Version: "2.0.0",
+		},
+	}
+
+	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
+		Description:  "JWT access token",
+		BearerFormat: "JWT",
+	})
+
+	v2Endpoints := []openswag.Endpoint{
+		{
+			Method:  "GET",
+			Path:    "/tasks",
+			Summary: "List tasks",
+			Tags:    []string{"Tasks"},
+			// v2 adds pagination parameters
+			Parameters: []openswag.Parameter{
+				{Name: "page", In: "query", Description: "Page number"},
+				{Name: "limit", In: "query", Description: "Items per page"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Paginated task list", ContentType: "application/json"},
+			},
+		},
+		{
+			Method:   "POST",
+			Path:     "/tasks",
+			Summary:  "Create a task",
+			Tags:     []string{"Tasks"},
+			// v2 adds auth requirement (breaking change)
+			Security: []auth.Scheme{bearerScheme},
+			RequestBody: &openswag.RequestBody{
+				Description: "Task to create",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 201, Description: "Task created", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Unauthorized"},
+			},
+		},
+		// v2 replaces hard DELETE with soft-delete (breaking change)
+		{
+			Method:   "POST",
+			Path:     "/tasks/{id}/archive",
+			Summary:  "Archive a task",
+			Tags:     []string{"Tasks"},
+			Security: []auth.Scheme{bearerScheme},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "Task ID"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Task archived", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Unauthorized"},
+			},
+		},
+		// v2 adds a new endpoint
+		{
+			Method:  "GET",
+			Path:    "/tasks/{id}/history",
+			Summary: "Get task history",
+			Tags:    []string{"Tasks"},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "Task ID"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Task change history", ContentType: "application/json"},
+			},
+		},
+	}
+
+	v2Docs := openswag.New(v2Config, v2Endpoints...)
+
+	// --- Compare the two specs ---
+	differ := versioning.Differ{
+		IgnoreDescriptions: true,
+	}
+
+	diff, err := differ.Compare(v1Docs.Spec(), v2Docs.Spec())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("Total changes: %d\n", len(diff.Changes))
+	fmt.Printf("Breaking changes: %d\n", len(diff.BreakingChanges))
+
+	// --- Generate changelog ---
+	changelogGen := versioning.ChangelogGenerator{
+		GroupByTag: true,
+		Format:     "markdown",
+	}
+	changelog, _ := changelogGen.Generate(diff)
+	fmt.Println("\n" + changelog)
+
+	// --- Generate migration guide ---
+	migrationGen := versioning.MigrationGenerator{
+		IncludeExamples: true,
+		Format:          "markdown",
+	}
+	guide, _ := migrationGen.Generate(diff)
+	fmt.Println(guide)
+
+	// --- Optionally serve both versions side by side ---
+	mux := http.NewServeMux()
+	openswag.Mount(mux, "/docs/v1", v1Docs)
+	openswag.Mount(mux, "/docs/v2", v2Docs)
+
+	fmt.Println("\nv1 docs: http://localhost:8080/docs/v1")
+	fmt.Println("v2 docs: http://localhost:8080/docs/v2")
+	http.ListenAndServe(":8080", mux)
+}
+```
+
+## What Changed Between v1 and v2
+
+| Change | Type | Breaking? |
+|--------|------|-----------|
+| `DELETE /tasks/{id}` removed | Endpoint removed | Yes |
+| `POST /tasks` now requires auth | Security added | Yes |
+| `GET /tasks` gained `page` and `limit` params | Parameters added | No |
+| `POST /tasks/{id}/archive` added | New endpoint | No |
+| `GET /tasks/{id}/history` added | New endpoint | No |
+
+## Key Concepts
+
+### Building specs programmatically
+
+Instead of loading YAML files, this example builds both v1 and v2 specs in code using `openswag.New`. The `Spec()` method returns the generated OpenAPI document that the differ can compare.
+
+### Differ configuration
+
+`IgnoreDescriptions: true` filters out description-only changes so the diff focuses on structural differences that affect API consumers.
+
+### Breaking change detection
+
+The differ automatically flags backwards-incompatible changes:
+- Removing an endpoint (`DELETE /tasks/{id}`)
+- Adding a security requirement to a previously public endpoint (`POST /tasks`)
+- Removing response fields or changing types
+
+### Changelog generation
+
+`ChangelogGenerator` produces a Markdown changelog grouped by tag. This is useful for release notes or API documentation updates.
+
+### Migration guide
+
+`MigrationGenerator` produces step-by-step instructions for API consumers to update their client code. With `IncludeExamples: true`, it includes code snippets showing the old and new usage.
+
+### Serving multiple versions
+
+You can mount both spec versions on the same server at different paths (`/docs/v1`, `/docs/v2`) so consumers can compare them side by side in the browser.
+
+## CI Pipeline Integration
+
+Use the differ in a CI pipeline to block merges that introduce breaking changes:
+
+```go title="ci_check.go"
+diff, _ := differ.Compare(mainSpec, prSpec)
+
+if len(diff.BreakingChanges) > 0 {
+	fmt.Println("❌ Breaking changes detected:")
+	for _, bc := range diff.BreakingChanges {
+		fmt.Printf("  [%s] %s %s — %s\n", bc.Severity, bc.Method, bc.Path, bc.Description)
+	}
+	os.Exit(1)
+}
+
+fmt.Println("✅ No breaking changes")
+```
+
+## Run It
+
+```bash
+go run main.go
+```
+
+The program prints the diff summary, changelog, and migration guide to stdout, then serves both spec versions at [http://localhost:8080/docs/v1](http://localhost:8080/docs/v1) and [http://localhost:8080/docs/v2](http://localhost:8080/docs/v2).

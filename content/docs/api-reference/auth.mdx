@@ -1,0 +1,230 @@
+---
+title: Auth Package
+description: API reference for pkg/auth — security schemes, playground configuration, and credential storage.
+---
+
+# Auth Package
+
+`pkg/auth` provides types for defining OpenAPI security schemes, configuring the interactive authentication playground, and managing credential persistence.
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/auth"
+```
+
+## Scheme
+
+Represents a single OpenAPI security scheme.
+
+```go
+type Scheme struct {
+    Name        string     // Unique scheme identifier, e.g. "bearerAuth"
+    Type        SchemeType // bearer, basic, apiKey, cookie, oauth2
+    Description string     // Human-readable description
+    In          string     // Location for apiKey: "header", "query", or "cookie"
+    FieldName   string     // Header/query/cookie name for apiKey schemes
+    BearerFormat string    // Token format hint, e.g. "JWT"
+    Flows       *OAuthFlows // OAuth2 flow definitions (oauth2 type only)
+}
+```
+
+### SchemeType Constants
+
+```go
+type SchemeType string
+
+const (
+    SchemeBearer SchemeType = "bearer"
+    SchemeBasic  SchemeType = "basic"
+    SchemeAPIKey SchemeType = "apiKey"
+    SchemeCookie SchemeType = "cookie"
+    SchemeOAuth2 SchemeType = "oauth2"
+)
+```
+
+### Constructors
+
+```go
+func BearerAuth() Scheme
+```
+
+Returns a pre-configured Bearer token scheme with `BearerFormat: "JWT"`.
+
+```go
+func BasicAuth() Scheme
+```
+
+Returns a pre-configured HTTP Basic authentication scheme.
+
+```go
+func APIKeyAuth(name, in string) Scheme
+```
+
+Returns an API key scheme. `name` is the header/query parameter name, `in` is `"header"` or `"query"`.
+
+```go
+func CookieAuth(cookieName string) Scheme
+```
+
+Returns a cookie-based authentication scheme.
+
+```go
+func OAuth2(flows *OAuthFlows) Scheme
+```
+
+Returns an OAuth2 scheme with the given flow configuration.
+
+### Usage
+
+```go
+schemes := []auth.Scheme{
+    auth.BearerAuth(),
+    auth.APIKeyAuth("X-API-Key", "header"),
+}
+
+cfg := openswag.Config{
+    // ...
+    Security: schemes,
+}
+```
+
+## OAuthFlows
+
+Defines OAuth2 flow configurations.
+
+```go
+type OAuthFlows struct {
+    AuthorizationCode *OAuthFlow
+    ClientCredentials *OAuthFlow
+    Implicit          *OAuthFlow
+    Password          *OAuthFlow
+}
+
+type OAuthFlow struct {
+    AuthorizationURL string
+    TokenURL         string
+    RefreshURL       string
+    Scopes           map[string]string // scope name → description
+}
+```
+
+## PlaygroundConfig
+
+Configures the interactive authentication playground in the docs UI. Users can enter credentials and test authenticated endpoints directly.
+
+```go
+type PlaygroundConfig struct {
+    Enabled            bool              // Enable the auth playground
+    PersistCredentials bool              // Remember credentials across sessions
+    DefaultScheme      string            // Pre-selected scheme name
+    Store              CredentialStore   // Storage backend for credentials
+}
+```
+
+### Functional Options
+
+```go
+func WithPlayground(opts ...PlaygroundOption) PlaygroundConfig
+```
+
+```go
+func EnablePersistence() PlaygroundOption
+```
+
+Enables credential persistence across browser sessions using localStorage.
+
+```go
+func WithDefaultScheme(name string) PlaygroundOption
+```
+
+Sets the initially selected authentication scheme.
+
+```go
+func WithStore(store CredentialStore) PlaygroundOption
+```
+
+Provides a custom credential storage backend.
+
+### Usage
+
+```go
+playground := auth.WithPlayground(
+    auth.EnablePersistence(),
+    auth.WithDefaultScheme("bearerAuth"),
+)
+
+cfg := openswag.Config{
+    // ...
+    AuthPlayground: playground,
+}
+```
+
+## CredentialStore
+
+Interface for persisting user-entered credentials.
+
+```go
+type CredentialStore interface {
+    Get(scheme string) (string, error)
+    Set(scheme string, value string) error
+    Delete(scheme string) error
+}
+```
+
+The default implementation uses the browser's `localStorage`. You can provide a custom store for server-side persistence or encrypted storage.
+
+### Built-in Stores
+
+```go
+func NewLocalStore() CredentialStore
+```
+
+Returns the default localStorage-backed store.
+
+```go
+func NewMemoryStore() CredentialStore
+```
+
+Returns an in-memory store that does not persist across page reloads. Useful for testing or high-security environments.
+
+## Quick Example
+
+```go
+package main
+
+import (
+    "net/http"
+    openswag "github.com/gopackx/open-swag-go"
+    "github.com/gopackx/open-swag-go/pkg/auth"
+)
+
+func main() {
+    cfg := openswag.Config{
+        Info: openswag.Info{Title: "Secure API", Version: "1.0.0"},
+        Security: []auth.Scheme{
+            auth.BearerAuth(),
+            auth.APIKeyAuth("X-API-Key", "header"),
+        },
+        AuthPlayground: auth.WithPlayground(
+            auth.EnablePersistence(),
+            auth.WithDefaultScheme("bearerAuth"),
+        ),
+    }
+
+    endpoints := []openswag.Endpoint{
+        {
+            Method:   "GET",
+            Path:     "/me",
+            Summary:  "Get current user",
+            Security: []string{"bearerAuth"},
+            Responses: []openswag.Response{
+                {StatusCode: 200, Description: "Current user", ContentType: "application/json"},
+                {StatusCode: 401, Description: "Unauthorized"},
+            },
+        },
+    }
+
+    docs := openswag.New(cfg, endpoints...)
+    http.Handle("/docs/", docs.Handler())
+    http.ListenAndServe(":8080", nil)
+}
+```

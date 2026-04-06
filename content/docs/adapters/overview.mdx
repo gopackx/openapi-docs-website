@@ -1,0 +1,48 @@
+---
+title: Adapter Overview
+description: Compare the five framework adapters supported by open-swag-go and choose the right one for your project.
+---
+
+# Adapter Overview
+
+open-swag-go ships adapters for five popular Go web frameworks. Each adapter provides a `Mount` function that registers the documentation routes on your router. Some adapters also offer `MountGroup` for mounting under a route group with shared middleware.
+
+## Comparison Table
+
+| Feature | Chi | Gin | Echo | Fiber | net/http |
+|---|---|---|---|---|---|
+| Mount | ✓ | ✓ | ✓ | ✓ | ✓ |
+| MountGroup | ✗ | ✓ | ✓ | ✓ | ✗ |
+| Middleware support | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Static export | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Custom path prefix | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+## Choosing an Adapter
+
+- **Chi** — Lightweight, idiomatic `net/http` compatible router. Use `Mount` to attach docs to any chi router.
+- **Gin** — High-performance framework with `MountGroup` support for route groups and shared middleware.
+- **Echo** — Minimalist framework with `MountGroup` support and built-in middleware ecosystem.
+- **Fiber** — Express-inspired framework built on fasthttp. Supports `MountGroup` for grouped routes.
+- **net/http** — Zero dependencies. Uses the standard library `http.ServeMux`. No extra install required.
+
+## Installation
+
+Each adapter lives in its own sub-package. Install only the one you need:
+
+```bash
+# Chi
+go get github.com/gopackx/open-swag-go/adapters/chi
+
+# Gin
+go get github.com/gopackx/open-swag-go/adapters/gin
+
+# Echo
+go get github.com/gopackx/open-swag-go/adapters/echo
+
+# Fiber
+go get github.com/gopackx/open-swag-go/adapters/fiber
+
+# net/http — built-in, no extra install needed
+```
+
+See each adapter's dedicated page for full setup instructions and code examples.

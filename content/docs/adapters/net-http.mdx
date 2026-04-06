@@ -1,0 +1,74 @@
+---
+title: net/http Adapter
+description: Use open-swag-go with the Go standard library net/http package — no extra dependencies required.
+---
+
+# net/http Adapter
+
+The net/http adapter is built into the core `open-swag-go` package. It mounts documentation routes on a standard `http.ServeMux` with zero external dependencies.
+
+## Installation
+
+No extra install needed — the `Mount` function is part of the core package:
+
+```bash
+go get github.com/gopackx/open-swag-go
+```
+
+## Mount
+
+`Mount` registers documentation routes on an `http.ServeMux` at the given path prefix.
+
+```go title="main.go"
+package main
+
+import (
+	"net/http"
+
+	openswag "github.com/gopackx/open-swag-go"
+)
+
+func main() {
+	mux := http.NewServeMux()
+
+	docs := openswag.New(openswag.Config{
+		Title:   "My API",
+		Version: "1.0.0",
+	})
+
+	docs.Add(openswag.Endpoint{
+		Method:  "GET",
+		Path:    "/health",
+		Summary: "Health check",
+		Responses: []openswag.Response{
+			{Status: 200, Description: "OK"},
+		},
+	})
+
+	openswag.Mount(mux, "/docs", docs)
+
+	http.ListenAndServe(":8080", mux)
+}
+```
+
+## Middleware
+
+Since `Mount` works with `http.ServeMux`, you can wrap it with any standard `net/http` middleware:
+
+```go
+handler := loggingMiddleware(mux)
+http.ListenAndServe(":8080", handler)
+```
+
+Or protect the docs path specifically:
+
+```go
+mux.Handle("/docs/", authMiddleware(openswag.Handler("/docs", docs)))
+```
+
+## Notes
+
+- This is the simplest adapter — no third-party router required.
+- There is no `MountGroup` function for net/http. Use standard `http.ServeMux` patterns or middleware wrapping for grouped behavior.
+- Works with Go 1.22+ enhanced `ServeMux` routing patterns.
+- Ideal for small services, CLIs with embedded docs, or projects that avoid external dependencies.

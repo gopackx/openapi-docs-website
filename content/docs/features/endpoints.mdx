@@ -1,0 +1,297 @@
+---
+title: Endpoints
+description: Define API endpoints as Go structs using Endpoint, Parameter, RequestBody, and Response types.
+---
+
+# Endpoints
+
+Every API operation in open-swag-go is described by an `Endpoint` struct. You define the HTTP method, path, parameters, request body, and responses — open-swag-go turns them into a valid OpenAPI 3.x spec.
+
+## The Endpoint Struct
+
+```go title="endpoint.go"
+type Endpoint struct {
+	Method      string        // HTTP method: GET, POST, PUT, PATCH, DELETE
+	Path        string        // URL path, e.g. "/users/{id}"
+	Summary     string        // Short one-line description
+	Description string        // Detailed explanation (supports Markdown)
+	Tags        []string      // Grouping tags for the docs UI sidebar
+	Parameters  []Parameter   // Path, query, and header parameters
+	RequestBody *RequestBody  // Request body definition (nil for GET/DELETE)
+	Responses   []Response    // Possible responses
+}
+```
+
+A minimal endpoint only needs `Method`, `Path`, and at least one `Response`:
+
+```go
+openswag.Endpoint{
+	Method:  "GET",
+	Path:    "/health",
+	Summary: "Health check",
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "OK"},
+	},
+}
+```
+
+## Parameters
+
+Use `Parameter` to describe path, query, or header inputs.
+
+```go title="parameter.go"
+type Parameter struct {
+	Name        string      // Parameter name, e.g. "id" or "page"
+	In          string      // Location: "path", "query", or "header"
+	Description string      // Human-readable description
+	Required    bool        // Whether the parameter is mandatory
+	Schema      interface{} // Go type or struct for schema generation
+}
+```
+
+### Path parameters
+
+Path parameters map to `{placeholder}` segments in the endpoint path. They are always required.
+
+```go
+openswag.Endpoint{
+	Method:  "GET",
+	Path:    "/users/{id}",
+	Summary: "Get user by ID",
+	Parameters: []openswag.Parameter{
+		{
+			Name:        "id",
+			In:          "path",
+			Description: "Unique user identifier",
+			Required:    true,
+			Schema:      int64(0),
+		},
+	},
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "User found", ContentType: "application/json"},
+		{StatusCode: 404, Description: "User not found"},
+	},
+}
+```
+
+### Query parameters
+
+Query parameters are appended to the URL as `?key=value`. They are typically optional.
+
+```go
+openswag.Endpoint{
+	Method:  "GET",
+	Path:    "/products",
+	Summary: "List products",
+	Parameters: []openswag.Parameter{
+		{
+			Name:        "page",
+			In:          "query",
+			Description: "Page number (1-based)",
+			Required:    false,
+			Schema:      int(0),
+		},
+		{
+			Name:        "limit",
+			In:          "query",
+			Description: "Items per page (max 100)",
+			Required:    false,
+			Schema:      int(0),
+		},
+		{
+			Name:        "category",
+			In:          "query",
+			Description: "Filter by category slug",
+			Required:    false,
+			Schema:      "",
+		},
+	},
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "Paginated product list", ContentType: "application/json"},
+	},
+}
+```
+
+## RequestBody
+
+Use `RequestBody` to describe the payload for POST, PUT, and PATCH operations.
+
+```go title="request_body.go"
+type RequestBody struct {
+	Description string      // What the body represents
+	ContentType string      // MIME type, e.g. "application/json"
+	Required    bool        // Whether the body is mandatory
+	Schema      interface{} // Go struct for schema generation
+}
+```
+
+```go
+openswag.Endpoint{
+	Method:  "POST",
+	Path:    "/users",
+	Summary: "Create a user",
+	Tags:    []string{"Users"},
+	RequestBody: &openswag.RequestBody{
+		Description: "User to create",
+		ContentType: "application/json",
+		Required:    true,
+		Schema:      CreateUserRequest{},
+	},
+	Responses: []openswag.Response{
+		{StatusCode: 201, Description: "User created", ContentType: "application/json"},
+		{StatusCode: 400, Description: "Validation error"},
+	},
+}
+```
+
+## Response
+
+Each endpoint declares one or more `Response` entries for different status codes.
+
+```go title="response.go"
+type Response struct {
+	StatusCode  int         // HTTP status code (200, 201, 404, etc.)
+	Description string      // What this response means
+	ContentType string      // MIME type of the response body (optional)
+	Schema      interface{} // Go struct for schema generation (optional)
+}
+```
+
+Endpoints typically include at least a success response and one or two error responses:
+
+```go
+Responses: []openswag.Response{
+	{
+		StatusCode:  200,
+		Description: "Successful response",
+		ContentType: "application/json",
+		Schema:      UserResponse{},
+	},
+	{
+		StatusCode:  400,
+		Description: "Invalid request parameters",
+		ContentType: "application/json",
+		Schema:      ErrorResponse{},
+	},
+	{
+		StatusCode:  404,
+		Description: "Resource not found",
+	},
+}
+```
+
+## Struct-Based Query and Path Parameters
+
+Instead of listing parameters one by one, you can use a Go struct with tags to define them all at once. Open-swag-go reads the struct fields and generates the parameter list automatically.
+
+```go title="struct_params.go"
+// ListProductsParams defines query parameters as a struct.
+type ListProductsParams struct {
+	Page     int    `query:"page"     description:"Page number"       example:"1"`
+	Limit    int    `query:"limit"    description:"Items per page"    example:"20"`
+	Category string `query:"category" description:"Filter by category"`
+	SortBy   string `query:"sort_by"  description:"Sort field"        example:"created_at"`
+}
+
+// GetProductParams defines path parameters as a struct.
+type GetProductParams struct {
+	ID int64 `path:"id" description:"Product ID" required:"true" example:"42"`
+}
+```
+
+Use the struct as the `Schema` on a parameter or pass it directly to the endpoint:
+
+```go
+openswag.Endpoint{
+	Method:     "GET",
+	Path:       "/products",
+	Summary:    "List products with filtering",
+	Tags:       []string{"Products"},
+	Parameters: openswag.ParametersFromStruct(ListProductsParams{}),
+	Responses: []openswag.Response{
+		{StatusCode: 200, Description: "Product list", ContentType: "application/json"},
+	},
+}
+```
+
+This approach keeps parameter definitions type-safe and co-located with the handler logic.
+
+## Co-Located Endpoint Definitions
+
+A common pattern is to define endpoints right next to the handler functions they describe. This keeps documentation and implementation in sync and makes it easy to spot when they drift apart.
+
+```go title="handlers/products.go"
+package handlers
+
+import openswag "github.com/gopackx/open-swag-go"
+
+// ProductEndpoints returns all product-related endpoint definitions.
+func ProductEndpoints() []openswag.Endpoint {
+	return []openswag.Endpoint{
+		listProducts(),
+		getProduct(),
+		createProduct(),
+	}
+}
+
+func listProducts() openswag.Endpoint {
+	return openswag.Endpoint{
+		Method:     "GET",
+		Path:       "/products",
+		Summary:    "List products",
+		Tags:       []string{"Products"},
+		Parameters: openswag.ParametersFromStruct(ListProductsParams{}),
+		Responses: []openswag.Response{
+			{StatusCode: 200, Description: "Product list", ContentType: "application/json"},
+		},
+	}
+}
+
+func getProduct() openswag.Endpoint {
+	return openswag.Endpoint{
+		Method:  "GET",
+		Path:    "/products/{id}",
+		Summary: "Get product by ID",
+		Tags:    []string{"Products"},
+		Parameters: []openswag.Parameter{
+			{Name: "id", In: "path", Required: true, Schema: int64(0)},
+		},
+		Responses: []openswag.Response{
+			{StatusCode: 200, Description: "Product details", ContentType: "application/json"},
+			{StatusCode: 404, Description: "Product not found"},
+		},
+	}
+}
+
+func createProduct() openswag.Endpoint {
+	return openswag.Endpoint{
+		Method:  "POST",
+		Path:    "/products",
+		Summary: "Create a product",
+		Tags:    []string{"Products"},
+		RequestBody: &openswag.RequestBody{
+			Description: "Product to create",
+			ContentType: "application/json",
+			Required:    true,
+			Schema:      CreateProductRequest{},
+		},
+		Responses: []openswag.Response{
+			{StatusCode: 201, Description: "Product created", ContentType: "application/json"},
+			{StatusCode: 400, Description: "Validation error"},
+		},
+	}
+}
+```
+
+Then in your main file, collect all endpoint groups:
+
+```go title="main.go"
+endpoints := append(
+	handlers.ProductEndpoints(),
+	handlers.UserEndpoints()...,
+)
+
+docs := openswag.New(cfg, endpoints...)
+```
+
+This pattern scales well as your API grows — each domain package owns its endpoint definitions, and the main file just assembles them.

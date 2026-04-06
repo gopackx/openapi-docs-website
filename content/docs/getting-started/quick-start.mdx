@@ -1,0 +1,150 @@
+---
+title: Quick Start
+description: Get a fully documented API running in under five minutes with open-swag-go and net/http.
+---
+
+# Quick Start
+
+This guide walks you through a complete, runnable Go program that serves interactive API documentation using `open-swag-go` and the standard library `net/http` router.
+
+## The Full Program
+
+Create a file called `main.go` and paste the following:
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	openswag "github.com/gopackx/open-swag-go"
+)
+
+func main() {
+	// 1. Configure your API metadata
+	cfg := openswag.Config{
+		Info: openswag.Info{
+			Title:       "Pet Store API",
+			Version:     "1.0.0",
+			Description: "A simple pet store to demo open-swag-go.",
+		},
+		Servers: []openswag.Server{
+			{URL: "http://localhost:8080"},
+		},
+	}
+
+	// 2. Define your endpoints
+	endpoints := []openswag.Endpoint{
+		{
+			Method:      "GET",
+			Path:        "/pets",
+			Summary:     "List all pets",
+			Description: "Returns every pet in the store.",
+			Tags:        []string{"Pets"},
+			Responses: []openswag.Response{
+				{
+					StatusCode:  200,
+					Description: "A list of pets",
+					ContentType: "application/json",
+				},
+			},
+		},
+		{
+			Method:      "POST",
+			Path:        "/pets",
+			Summary:     "Add a pet",
+			Description: "Creates a new pet in the store.",
+			Tags:        []string{"Pets"},
+			RequestBody: &openswag.RequestBody{
+				Description: "Pet object to create",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{
+					StatusCode:  201,
+					Description: "Pet created successfully",
+					ContentType: "application/json",
+				},
+			},
+		},
+	}
+
+	// 3. Create the docs instance and mount it
+	docs := openswag.New(cfg, endpoints...)
+
+	mux := http.NewServeMux()
+	openswag.Mount(mux, "/docs", docs)
+
+	fmt.Println("Docs available at http://localhost:8080/docs")
+	http.ListenAndServe(":8080", mux)
+}
+```
+
+## Step-by-Step Walkthrough
+
+### 1. Configure API metadata
+
+`openswag.Config` holds the top-level information that appears in the generated OpenAPI spec — title, version, description, and server URLs.
+
+```go
+cfg := openswag.Config{
+	Info: openswag.Info{
+		Title:       "Pet Store API",
+		Version:     "1.0.0",
+		Description: "A simple pet store to demo open-swag-go.",
+	},
+	Servers: []openswag.Server{
+		{URL: "http://localhost:8080"},
+	},
+}
+```
+
+### 2. Define endpoints
+
+Each `openswag.Endpoint` describes a single API operation. You specify the HTTP method, path, summary, tags, request body, and responses. Open Swag Go turns these into a valid OpenAPI 3.x spec behind the scenes.
+
+```go
+endpoints := []openswag.Endpoint{
+	{
+		Method:  "GET",
+		Path:    "/pets",
+		Summary: "List all pets",
+		// ...
+	},
+	{
+		Method:  "POST",
+		Path:    "/pets",
+		Summary: "Add a pet",
+		// ...
+	},
+}
+```
+
+### 3. Mount and serve
+
+`openswag.New` creates a docs handler from your config and endpoints. `openswag.Mount` attaches it to any `net/http` mux at the path you choose.
+
+```go
+docs := openswag.New(cfg, endpoints...)
+
+mux := http.NewServeMux()
+openswag.Mount(mux, "/docs", docs)
+
+http.ListenAndServe(":8080", mux)
+```
+
+## Run It
+
+```bash
+go run main.go
+```
+
+Open [http://localhost:8080/docs](http://localhost:8080/docs) in your browser. You should see a Scalar-powered docs UI with your two pet endpoints listed and ready to explore.
+
+## Next Steps
+
+- **Add more features** — authentication schemes, try-it console, code snippets, and theming. See the [Features](/docs/features/endpoints) section.
+- **Use a framework adapter** — if you're on Chi, Gin, Echo, or Fiber, check the [Adapters](/docs/adapters/overview) guide for framework-specific mounting.
+- **Browse real-world examples** — the [Examples](/docs/examples/basic) section walks through progressively complex setups.

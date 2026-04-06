@@ -1,0 +1,183 @@
+---
+title: Basic CRUD Example
+description: A simple pet store API with GET, POST, PUT, and DELETE endpoints using net/http and open-swag-go.
+---
+
+# Basic CRUD Example
+
+This example builds a minimal pet store API with full CRUD operations using the standard library `net/http` router. It demonstrates the core open-swag-go workflow: define config, declare endpoints, mount docs.
+
+## The Full Program
+
+```go title="main.go"
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"sync"
+
+	openswag "github.com/gopackx/open-swag-go"
+)
+
+type Pet struct {
+	ID   int    `json:"id" description:"Unique pet identifier" example:"1"`
+	Name string `json:"name" description:"Pet name" example:"Buddy"`
+	Kind string `json:"kind" description:"Animal type" example:"dog"`
+}
+
+var (
+	pets   = []Pet{{ID: 1, Name: "Buddy", Kind: "dog"}}
+	mu     sync.Mutex
+	nextID = 2
+)
+
+func main() {
+	cfg := openswag.Config{
+		Info: openswag.Info{
+			Title:       "Pet Store API",
+			Version:     "1.0.0",
+			Description: "A basic CRUD pet store.",
+		},
+		Servers: []openswag.Server{
+			{URL: "http://localhost:8080"},
+		},
+	}
+
+	endpoints := []openswag.Endpoint{
+		{
+			Method:      "GET",
+			Path:        "/pets",
+			Summary:     "List all pets",
+			Description: "Returns every pet in the store.",
+			Tags:        []string{"Pets"},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "A list of pets", ContentType: "application/json"},
+			},
+		},
+		{
+			Method:      "POST",
+			Path:        "/pets",
+			Summary:     "Create a pet",
+			Description: "Adds a new pet to the store.",
+			Tags:        []string{"Pets"},
+			RequestBody: &openswag.RequestBody{
+				Description: "Pet to create",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 201, Description: "Pet created", ContentType: "application/json"},
+				{StatusCode: 400, Description: "Invalid input"},
+			},
+		},
+		{
+			Method:      "PUT",
+			Path:        "/pets/{id}",
+			Summary:     "Update a pet",
+			Description: "Replaces an existing pet by ID.",
+			Tags:        []string{"Pets"},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "Pet ID"},
+			},
+			RequestBody: &openswag.RequestBody{
+				Description: "Updated pet data",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Pet updated", ContentType: "application/json"},
+				{StatusCode: 404, Description: "Pet not found"},
+			},
+		},
+		{
+			Method:      "DELETE",
+			Path:        "/pets/{id}",
+			Summary:     "Delete a pet",
+			Description: "Removes a pet from the store by ID.",
+			Tags:        []string{"Pets"},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "Pet ID"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 204, Description: "Pet deleted"},
+				{StatusCode: 404, Description: "Pet not found"},
+			},
+		},
+	}
+
+	docs := openswag.New(cfg, endpoints...)
+
+	mux := http.NewServeMux()
+
+	// Mount your actual handlers
+	mux.HandleFunc("GET /pets", listPets)
+	mux.HandleFunc("POST /pets", createPet)
+	mux.HandleFunc("PUT /pets/{id}", updatePet)
+	mux.HandleFunc("DELETE /pets/{id}", deletePet)
+
+	// Mount the docs UI
+	openswag.Mount(mux, "/docs", docs)
+
+	fmt.Println("API running on :8080, docs at http://localhost:8080/docs")
+	http.ListenAndServe(":8080", mux)
+}
+
+func listPets(w http.ResponseWriter, r *http.Request) {
+	mu.Lock()
+	defer mu.Unlock()
+	json.NewEncoder(w).Encode(pets)
+}
+
+func createPet(w http.ResponseWriter, r *http.Request) {
+	var p Pet
+	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
+		http.Error(w, "invalid JSON", http.StatusBadRequest)
+		return
+	}
+	mu.Lock()
+	p.ID = nextID
+	nextID++
+	pets = append(pets, p)
+	mu.Unlock()
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(p)
+}
+
+func updatePet(w http.ResponseWriter, r *http.Request) {
+	// handler implementation omitted for brevity
+	w.WriteHeader(http.StatusOK)
+}
+
+func deletePet(w http.ResponseWriter, r *http.Request) {
+	// handler implementation omitted for brevity
+	w.WriteHeader(http.StatusNoContent)
+}
+```
+
+## Key Concepts
+
+### Config and Info
+
+`openswag.Config` holds the metadata that appears at the top of your generated OpenAPI spec. The `Info` struct sets the title, version, and description shown in the docs UI.
+
+### Endpoint definitions
+
+Each `openswag.Endpoint` maps to a single API operation. You declare the HTTP method, path, tags (for grouping), parameters, request body, and responses. Open-swag-go converts these into a valid OpenAPI 3.x spec automatically.
+
+### Path parameters
+
+The `PUT` and `DELETE` endpoints use `{id}` in the path. Declare a matching `Parameter` with `In: "path"` so the docs UI renders an input field for it.
+
+### Mounting
+
+`openswag.Mount(mux, "/docs", docs)` attaches the Scalar-powered docs UI to your mux. Your actual API handlers and the docs live on the same server.
+
+## Run It
+
+```bash
+go run main.go
+```
+
+Open [http://localhost:8080/docs](http://localhost:8080/docs) to see the interactive documentation with all four CRUD endpoints.

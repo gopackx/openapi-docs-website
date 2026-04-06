@@ -1,0 +1,197 @@
+---
+title: Try-It Console
+description: Configure an interactive API console that lets visitors send real requests, manage environments, and track request history directly from the docs.
+---
+
+# Try-It Console
+
+The try-it console embeds an interactive API client into your Scalar docs UI. Visitors can send real HTTP requests against your API, switch between environments (dev, staging, production), and browse their request history — all without leaving the documentation.
+
+## ConsoleConfig
+
+`ConsoleConfig` controls the console behavior and is passed to the top-level `Config`.
+
+```go title="console_config.go"
+type ConsoleConfig struct {
+	Enabled        bool                // Enable the try-it console panel
+	CORSProxy      string              // Proxy URL to bypass browser CORS restrictions
+	DefaultHeaders map[string]string   // Headers attached to every request
+	History        History             // Request history settings
+	Environments   []Environment       // Available API environments
+}
+```
+
+### Minimal setup
+
+```go title="basic_console.go"
+import (
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/tryit"
+)
+
+cfg := openswag.Config{
+	Title:   "My API",
+	Version: "1.0.0",
+	Console: tryit.ConsoleConfig{
+		Enabled: true,
+	},
+}
+```
+
+This enables the console with no CORS proxy, no default headers, and default history settings. Visitors can send requests to the current host.
+
+### CORS Proxy
+
+Browser security policies block cross-origin requests from the docs UI. If your API runs on a different origin, set `CORSProxy` to a proxy that forwards requests:
+
+```go title="cors_proxy.go"
+console := tryit.ConsoleConfig{
+	Enabled:   true,
+	CORSProxy: "https://proxy.example.com",
+}
+```
+
+Requests are sent to `https://proxy.example.com?url=<actual_url>` so the browser never makes a direct cross-origin call.
+
+### Default Headers
+
+Attach headers to every request the console sends. Useful for API versioning or tracking headers:
+
+```go title="default_headers.go"
+console := tryit.ConsoleConfig{
+	Enabled: true,
+	DefaultHeaders: map[string]string{
+		"X-API-Version": "2024-01-01",
+		"X-Source":      "docs-console",
+	},
+}
+```
+
+## EnvironmentManager
+
+`EnvironmentManager` lets you define multiple API environments so visitors can switch between them without editing URLs manually.
+
+```go title="environment.go"
+type Environment struct {
+	Name    string // Display name (e.g. "Production")
+	URL     string // Base URL for this environment
+	Default bool   // Pre-select this environment
+}
+```
+
+### Configuring environments
+
+```go title="multi_env.go"
+console := tryit.ConsoleConfig{
+	Enabled: true,
+	Environments: []tryit.Environment{
+		{Name: "Development", URL: "http://localhost:8080", Default: true},
+		{Name: "Staging", URL: "https://staging-api.example.com"},
+		{Name: "Production", URL: "https://api.example.com"},
+	},
+}
+```
+
+The console renders a dropdown for environment selection. The environment marked `Default: true` is pre-selected when the page loads.
+
+### Dynamic base URLs
+
+When a visitor selects an environment, the console replaces the base URL in every request path. For example, a `GET /users` endpoint becomes `http://localhost:8080/users` in development and `https://api.example.com/users` in production.
+
+## History
+
+`History` controls request history tracking. The console can record requests and responses so visitors can review or replay them.
+
+```go title="history_config.go"
+type History struct {
+	Enabled    bool // Enable request history tracking
+	MaxEntries int  // Maximum number of history entries to keep
+}
+```
+
+### Enabling history
+
+```go title="history_setup.go"
+console := tryit.ConsoleConfig{
+	Enabled: true,
+	History: tryit.History{
+		Enabled:    true,
+		MaxEntries: 50,
+	},
+}
+```
+
+When enabled, each request/response pair is stored in the browser. Visitors can browse past requests, inspect response bodies, and replay them with one click. Older entries are evicted once `MaxEntries` is reached.
+
+## Full Example
+
+A complete configuration with CORS proxy, three environments, default headers, and history tracking:
+
+```go title="full_console.go"
+package main
+
+import (
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/tryit"
+	"github.com/gopackx/open-swag-go/adapters/nethttp"
+	"net/http"
+)
+
+func main() {
+	console := tryit.ConsoleConfig{
+		Enabled:   true,
+		CORSProxy: "https://proxy.example.com",
+		DefaultHeaders: map[string]string{
+			"X-API-Version": "2024-01-01",
+		},
+		Environments: []tryit.Environment{
+			{Name: "Development", URL: "http://localhost:8080", Default: true},
+			{Name: "Staging", URL: "https://staging-api.example.com"},
+			{Name: "Production", URL: "https://api.example.com"},
+		},
+		History: tryit.History{
+			Enabled:    true,
+			MaxEntries: 100,
+		},
+	}
+
+	cfg := openswag.Config{
+		Title:       "My API",
+		Version:     "1.0.0",
+		Description: "API with interactive console",
+		Console:     console,
+	}
+
+	endpoints := []openswag.Endpoint{
+		{
+			Method:  "GET",
+			Path:    "/users",
+			Summary: "List users",
+			Tags:    []string{"Users"},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "User list", ContentType: "application/json"},
+			},
+		},
+		{
+			Method:  "POST",
+			Path:    "/users",
+			Summary: "Create user",
+			Tags:    []string{"Users"},
+			RequestBody: &openswag.RequestBody{
+				ContentType: "application/json",
+				Description: "User to create",
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 201, Description: "Created user", ContentType: "application/json"},
+				{StatusCode: 400, Description: "Validation error"},
+			},
+		},
+	}
+
+	docs := openswag.New(cfg, endpoints...)
+	mux := http.NewServeMux()
+	nethttp.Mount(mux, "/docs", docs)
+
+	http.ListenAndServe(":8080", mux)
+}
+```

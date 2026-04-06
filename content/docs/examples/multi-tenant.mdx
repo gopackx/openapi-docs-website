@@ -1,0 +1,236 @@
+---
+title: Multi-Tenant SaaS Example
+description: Serve per-tenant API documentation with different configurations, endpoints, and branding for each tenant.
+---
+
+# Multi-Tenant SaaS Example
+
+This example demonstrates how to serve separate API documentation for each tenant in a SaaS application. Each tenant gets its own docs instance with a custom title, server URL, endpoints, and theme — all running on a single server.
+
+## The Full Program
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/auth"
+)
+
+// Tenant holds the configuration for a single tenant's API docs.
+type Tenant struct {
+	Slug        string
+	Name        string
+	ServerURL   string
+	Theme       string
+	DocsAuth    *openswag.DocsAuth
+	Endpoints   []openswag.Endpoint
+}
+
+func main() {
+	// --- Define shared endpoints available to all tenants ---
+	sharedEndpoints := []openswag.Endpoint{
+		{
+			Method:  "GET",
+			Path:    "/users",
+			Summary: "List users",
+			Tags:    []string{"Users"},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "User list", ContentType: "application/json"},
+			},
+		},
+		{
+			Method:  "POST",
+			Path:    "/users",
+			Summary: "Create a user",
+			Tags:    []string{"Users"},
+			RequestBody: &openswag.RequestBody{
+				Description: "User to create",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 201, Description: "User created", ContentType: "application/json"},
+				{StatusCode: 400, Description: "Validation error"},
+			},
+		},
+	}
+
+	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
+		Description:  "Tenant-scoped JWT",
+		BearerFormat: "JWT",
+	})
+
+	// --- Define per-tenant configurations ---
+	tenants := []Tenant{
+		{
+			Slug:      "acme",
+			Name:      "Acme Corp",
+			ServerURL: "https://acme.api.example.com",
+			Theme:     "blue",
+			DocsAuth: &openswag.DocsAuth{
+				Enabled:  true,
+				Username: "acme-docs",
+				Password: "acme-secret",
+			},
+			Endpoints: append(sharedEndpoints, openswag.Endpoint{
+				Method:   "GET",
+				Path:     "/billing/invoices",
+				Summary:  "List invoices",
+				Tags:     []string{"Billing"},
+				Security: []auth.Scheme{bearerScheme},
+				Responses: []openswag.Response{
+					{StatusCode: 200, Description: "Invoice list", ContentType: "application/json"},
+					{StatusCode: 401, Description: "Unauthorized"},
+				},
+			}),
+		},
+		{
+			Slug:      "globex",
+			Name:      "Globex Inc",
+			ServerURL: "https://globex.api.example.com",
+			Theme:     "purple",
+			DocsAuth: &openswag.DocsAuth{
+				Enabled:      true,
+				APIKey:       "globex-key-123",
+				APIKeyHeader: "X-Docs-Key",
+			},
+			Endpoints: append(sharedEndpoints,
+				openswag.Endpoint{
+					Method:   "GET",
+					Path:     "/analytics/events",
+					Summary:  "List analytics events",
+					Tags:     []string{"Analytics"},
+					Security: []auth.Scheme{bearerScheme},
+					Parameters: []openswag.Parameter{
+						{Name: "from", In: "query", Description: "Start date (ISO 8601)"},
+						{Name: "to", In: "query", Description: "End date (ISO 8601)"},
+					},
+					Responses: []openswag.Response{
+						{StatusCode: 200, Description: "Event list", ContentType: "application/json"},
+						{StatusCode: 401, Description: "Unauthorized"},
+					},
+				},
+				openswag.Endpoint{
+					Method:   "GET",
+					Path:     "/analytics/summary",
+					Summary:  "Get analytics summary",
+					Tags:     []string{"Analytics"},
+					Security: []auth.Scheme{bearerScheme},
+					Responses: []openswag.Response{
+						{StatusCode: 200, Description: "Summary data", ContentType: "application/json"},
+						{StatusCode: 401, Description: "Unauthorized"},
+					},
+				},
+			),
+		},
+		{
+			Slug:      "initech",
+			Name:      "Initech",
+			ServerURL: "https://initech.api.example.com",
+			Theme:     "green",
+			// No docs auth — public documentation
+			Endpoints: sharedEndpoints,
+		},
+	}
+
+	mux := http.NewServeMux()
+
+	// --- Mount docs for each tenant at /docs/{slug} ---
+	for _, t := range tenants {
+		cfg := openswag.Config{
+			Info: openswag.Info{
+				Title:       fmt.Sprintf("%s API", t.Name),
+				Version:     "1.0.0",
+				Description: fmt.Sprintf("API documentation for %s.", t.Name),
+			},
+			Servers: []openswag.Server{
+				{URL: t.ServerURL, Description: fmt.Sprintf("%s environment", t.Name)},
+			},
+			DocsAuth: t.DocsAuth,
+			UI: &openswag.UIConfig{
+				Theme: t.Theme,
+			},
+		}
+
+		docs := openswag.New(cfg, t.Endpoints...)
+		path := fmt.Sprintf("/docs/%s", t.Slug)
+		openswag.Mount(mux, path, docs)
+
+		fmt.Printf("  %s docs: http://localhost:8080%s\n", t.Name, path)
+	}
+
+	// --- Tenant directory page ---
+	mux.HandleFunc("GET /docs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<h1>API Documentation</h1><ul>`)
+		for _, t := range tenants {
+			fmt.Fprintf(w, `<li><a href="/docs/%s">%s</a></li>`, t.Slug, t.Name)
+		}
+		fmt.Fprint(w, `</ul>`)
+	})
+
+	fmt.Println("\nMulti-tenant docs server running on :8080")
+	http.ListenAndServe(":8080", mux)
+}
+```
+
+## Key Concepts
+
+### Per-tenant configuration
+
+Each tenant gets its own `openswag.Config` with a unique title, server URL, theme, and docs auth settings. The `Tenant` struct is a simple wrapper that groups these together.
+
+### Shared and tenant-specific endpoints
+
+All tenants share a base set of endpoints (`/users`). Individual tenants add their own endpoints on top:
+
+| Tenant | Extra endpoints | Theme | Docs auth |
+|--------|----------------|-------|-----------|
+| Acme Corp | `/billing/invoices` | Blue | Basic auth |
+| Globex Inc | `/analytics/events`, `/analytics/summary` | Purple | API key |
+| Initech | None (base only) | Green | None (public) |
+
+### Isolated docs instances
+
+Each call to `openswag.New` creates an independent docs instance with its own OpenAPI spec. Mounting them at different paths (`/docs/acme`, `/docs/globex`, `/docs/initech`) keeps them fully isolated.
+
+### Per-tenant theming
+
+The `UIConfig.Theme` field sets the Scalar UI theme for each tenant. Acme gets a blue theme, Globex gets purple, and Initech gets green — all from the same server.
+
+### Per-tenant docs auth
+
+Each tenant can have different docs auth settings. Acme uses basic auth, Globex uses an API key in a custom header, and Initech has public docs with no auth.
+
+### Tenant directory
+
+A simple HTML handler at `/docs` lists all tenants with links to their documentation. In production, you'd replace this with a proper landing page or redirect based on the authenticated user's tenant.
+
+## Scaling Considerations
+
+In a real SaaS application, tenant configurations would come from a database or configuration service rather than being hard-coded. The pattern stays the same:
+
+```go
+// Load tenants from your data store
+tenants, _ := tenantStore.ListAll()
+
+for _, t := range tenants {
+	cfg := buildConfigForTenant(t)
+	docs := openswag.New(cfg, t.Endpoints...)
+	openswag.Mount(mux, fmt.Sprintf("/docs/%s", t.Slug), docs)
+}
+```
+
+You can also lazy-load docs instances on first request to avoid mounting hundreds of tenants at startup.
+
+## Run It
+
+```bash
+go run main.go
+```
+
+Visit the tenant directory at [http://localhost:8080/docs](http://localhost:8080/docs), then click through to each tenant's documentation to see different endpoints, themes, and auth requirements.

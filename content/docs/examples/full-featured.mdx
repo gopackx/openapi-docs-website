@@ -1,0 +1,236 @@
+---
+title: Full-Featured E-Commerce API
+description: A complete e-commerce API example with pagination, filtering, struct-based parameters, and docs auth protection.
+---
+
+# Full-Featured E-Commerce API
+
+This example builds an e-commerce API that demonstrates advanced open-swag-go features: struct-based query and path parameters, pagination, filtering, schema generation from Go structs, and docs auth protection.
+
+## The Full Program
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/auth"
+)
+
+// --- Struct-based parameters and models ---
+
+type ListProductsParams struct {
+	Page     int    `json:"page" description:"Page number" example:"1"`
+	PageSize int    `json:"page_size" description:"Items per page" example:"20" validate:"min=1,max=100"`
+	Category string `json:"category" description:"Filter by category" example:"electronics"`
+	MinPrice float64 `json:"min_price" description:"Minimum price filter" example:"9.99"`
+	MaxPrice float64 `json:"max_price" description:"Maximum price filter" example:"999.99"`
+	SortBy   string `json:"sort_by" description:"Sort field" example:"price"`
+	Order    string `json:"order" description:"Sort order (asc or desc)" example:"asc"`
+}
+
+type Product struct {
+	ID          int     `json:"id" description:"Product ID" example:"42"`
+	Name        string  `json:"name" description:"Product name" example:"Wireless Headphones"`
+	Description string  `json:"description" description:"Product description" example:"Noise-cancelling over-ear headphones"`
+	Price       float64 `json:"price" description:"Price in USD" example:"79.99"`
+	Category    string  `json:"category" description:"Product category" example:"electronics"`
+	InStock     bool    `json:"in_stock" description:"Availability" example:"true"`
+}
+
+type CreateProductRequest struct {
+	Name        string  `json:"name" description:"Product name" example:"Wireless Headphones" validate:"required"`
+	Description string  `json:"description" description:"Product description" example:"Noise-cancelling over-ear headphones"`
+	Price       float64 `json:"price" description:"Price in USD" example:"79.99" validate:"required,min=0"`
+	Category    string  `json:"category" description:"Product category" example:"electronics" validate:"required"`
+}
+
+type PaginatedResponse struct {
+	Data       []Product `json:"data" description:"List of products"`
+	Page       int       `json:"page" description:"Current page" example:"1"`
+	PageSize   int       `json:"page_size" description:"Items per page" example:"20"`
+	TotalItems int       `json:"total_items" description:"Total matching items" example:"142"`
+	TotalPages int       `json:"total_pages" description:"Total pages" example:"8"`
+}
+
+type OrderItem struct {
+	ProductID int `json:"product_id" description:"Product ID" example:"42" validate:"required"`
+	Quantity  int `json:"quantity" description:"Quantity" example:"2" validate:"required,min=1"`
+}
+
+type CreateOrderRequest struct {
+	Items []OrderItem `json:"items" description:"Order line items" validate:"required,min=1"`
+}
+
+type Order struct {
+	ID     int         `json:"id" description:"Order ID" example:"1001"`
+	Items  []OrderItem `json:"items" description:"Order line items"`
+	Total  float64     `json:"total" description:"Order total in USD" example:"159.98"`
+	Status string      `json:"status" description:"Order status" example:"pending"`
+}
+
+func main() {
+	cfg := openswag.Config{
+		Info: openswag.Info{
+			Title:       "E-Commerce API",
+			Version:     "2.0.0",
+			Description: "Full-featured e-commerce API with products, orders, pagination, and filtering.",
+			Contact: &openswag.Contact{
+				Name:  "API Support",
+				Email: "[email]",
+				URL:   "https://example.com/support",
+			},
+			License: &openswag.License{
+				Name: "MIT",
+				URL:  "https://opensource.org/licenses/MIT",
+			},
+		},
+		Servers: []openswag.Server{
+			{URL: "http://localhost:8080", Description: "Local development"},
+			{URL: "https://api.example.com", Description: "Production"},
+		},
+		// Protect the docs UI with basic auth
+		DocsAuth: &openswag.DocsAuth{
+			Enabled:  true,
+			Username: "docs-viewer",
+			Password: "s3cret",
+		},
+	}
+
+	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
+		Description:  "JWT access token",
+		BearerFormat: "JWT",
+	})
+
+	endpoints := []openswag.Endpoint{
+		// --- Products ---
+		{
+			Method:      "GET",
+			Path:        "/products",
+			Summary:     "List products",
+			Description: "Returns a paginated, filterable list of products.",
+			Tags:        []string{"Products"},
+			Parameters: []openswag.Parameter{
+				{Name: "page", In: "query", Description: "Page number (default 1)"},
+				{Name: "page_size", In: "query", Description: "Items per page (1-100, default 20)"},
+				{Name: "category", In: "query", Description: "Filter by category"},
+				{Name: "min_price", In: "query", Description: "Minimum price"},
+				{Name: "max_price", In: "query", Description: "Maximum price"},
+				{Name: "sort_by", In: "query", Description: "Sort field (name, price, category)"},
+				{Name: "order", In: "query", Description: "Sort order (asc, desc)"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Paginated product list", ContentType: "application/json"},
+			},
+		},
+		{
+			Method:      "GET",
+			Path:        "/products/{id}",
+			Summary:     "Get a product",
+			Description: "Returns a single product by ID.",
+			Tags:        []string{"Products"},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "Product ID"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Product details", ContentType: "application/json"},
+				{StatusCode: 404, Description: "Product not found"},
+			},
+		},
+		{
+			Method:      "POST",
+			Path:        "/products",
+			Summary:     "Create a product",
+			Description: "Adds a new product to the catalog. Requires authentication.",
+			Tags:        []string{"Products"},
+			Security:    []auth.Scheme{bearerScheme},
+			RequestBody: &openswag.RequestBody{
+				Description: "Product to create",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 201, Description: "Product created", ContentType: "application/json"},
+				{StatusCode: 400, Description: "Validation error"},
+				{StatusCode: 401, Description: "Unauthorized"},
+			},
+		},
+		// --- Orders ---
+		{
+			Method:      "POST",
+			Path:        "/orders",
+			Summary:     "Place an order",
+			Description: "Creates a new order from a list of product IDs and quantities.",
+			Tags:        []string{"Orders"},
+			Security:    []auth.Scheme{bearerScheme},
+			RequestBody: &openswag.RequestBody{
+				Description: "Order details",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 201, Description: "Order placed", ContentType: "application/json"},
+				{StatusCode: 400, Description: "Invalid order"},
+				{StatusCode: 401, Description: "Unauthorized"},
+			},
+		},
+		{
+			Method:      "GET",
+			Path:        "/orders/{id}",
+			Summary:     "Get order status",
+			Description: "Returns the current status and details of an order.",
+			Tags:        []string{"Orders"},
+			Security:    []auth.Scheme{bearerScheme},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "Order ID"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Order details", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Unauthorized"},
+				{StatusCode: 404, Description: "Order not found"},
+			},
+		},
+	}
+
+	docs := openswag.New(cfg, endpoints...)
+
+	mux := http.NewServeMux()
+	openswag.Mount(mux, "/docs", docs)
+
+	fmt.Println("E-Commerce API docs at http://localhost:8080/docs")
+	http.ListenAndServe(":8080", mux)
+}
+```
+
+## Key Concepts
+
+### Struct-based parameters
+
+The `ListProductsParams` struct uses tags like `description`, `example`, and `validate` to generate rich OpenAPI parameter definitions. Open-swag-go's schema generator reads these tags and produces the correct parameter schemas automatically.
+
+### Pagination pattern
+
+The `GET /products` endpoint accepts `page` and `page_size` query parameters and returns a `PaginatedResponse` with metadata (`total_items`, `total_pages`). This is a common REST pattern that the docs UI renders clearly with input fields for each parameter.
+
+### Filtering and sorting
+
+Query parameters like `category`, `min_price`, `max_price`, `sort_by`, and `order` let consumers narrow results. Declaring them as explicit `Parameter` entries ensures they appear in the docs UI with descriptions and examples.
+
+### Docs auth protection
+
+The `DocsAuth` field on `Config` protects the documentation UI itself. Visitors must enter `docs-viewer` / `s3cret` before they can see the API docs. This is separate from the `bearerScheme` that protects the actual API endpoints.
+
+### Multiple servers
+
+The `Servers` slice lists both local development and production URLs. The docs UI lets consumers switch between them when using the try-it console.
+
+## Run It
+
+```bash
+go run main.go
+```
+
+Navigate to [http://localhost:8080/docs](http://localhost:8080/docs). You'll be prompted for credentials (`docs-viewer` / `s3cret`), then see the full e-commerce API with Products and Orders grouped by tag.

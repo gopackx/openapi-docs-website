@@ -1,0 +1,271 @@
+---
+title: Try-It Package
+description: API reference for pkg/tryit — interactive console, environment management, request history, and code snippets.
+---
+
+# Try-It Package
+
+`pkg/tryit` powers the interactive "Try It" console in the docs UI. It lets users send real HTTP requests, manage environment variables, view request history, and generate code snippets.
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/tryit"
+```
+
+## ConsoleConfig
+
+Top-level configuration for the try-it console.
+
+```go
+type ConsoleConfig struct {
+    Enabled         bool                // Enable the try-it console
+    CORSProxy       string              // Proxy URL for cross-origin requests
+    DefaultHeaders  map[string]string   // Headers added to every request
+    Environments    []Environment       // Predefined environments
+    History         HistoryConfig       // Request history settings
+    Snippets        SnippetsConfig      // Code snippet generation settings
+}
+```
+
+### Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Enabled` | `bool` | Toggle the console on or off |
+| `CORSProxy` | `string` | Proxy URL to bypass CORS restrictions |
+| `DefaultHeaders` | `map[string]string` | Headers injected into every outgoing request |
+| `Environments` | `[]Environment` | Named sets of variables (e.g. staging, production) |
+| `History` | `HistoryConfig` | Controls request history storage |
+| `Snippets` | `SnippetsConfig` | Controls which languages appear in snippet generation |
+
+### Usage
+
+```go
+console := tryit.ConsoleConfig{
+    Enabled:   true,
+    CORSProxy: "https://proxy.example.com",
+    DefaultHeaders: map[string]string{
+        "X-Request-Source": "docs",
+    },
+}
+```
+
+## Environment
+
+A named set of variables that can be switched in the console.
+
+```go
+type Environment struct {
+    Name      string            // Display name, e.g. "Staging"
+    Variables map[string]string // Key-value pairs, e.g. {"base_url": "https://staging.api.com"}
+}
+```
+
+## EnvironmentManager
+
+Manages multiple environments and resolves variable references in requests.
+
+```go
+type EnvironmentManager struct {
+    // unexported fields
+}
+
+func NewEnvironmentManager(envs ...Environment) *EnvironmentManager
+```
+
+### Methods
+
+```go
+func (m *EnvironmentManager) Active() *Environment
+```
+
+Returns the currently selected environment.
+
+```go
+func (m *EnvironmentManager) SetActive(name string) error
+```
+
+Switches to the environment with the given name. Returns an error if the name is not found.
+
+```go
+func (m *EnvironmentManager) Resolve(input string) string
+```
+
+Replaces `{{variable}}` placeholders in the input string with values from the active environment.
+
+```go
+func (m *EnvironmentManager) Add(env Environment)
+```
+
+Adds a new environment at runtime.
+
+```go
+func (m *EnvironmentManager) List() []Environment
+```
+
+Returns all registered environments.
+
+### Usage
+
+```go
+mgr := tryit.NewEnvironmentManager(
+    tryit.Environment{
+        Name:      "Local",
+        Variables: map[string]string{"base_url": "http://localhost:8080"},
+    },
+    tryit.Environment{
+        Name:      "Staging",
+        Variables: map[string]string{"base_url": "https://staging.api.com"},
+    },
+)
+
+mgr.SetActive("Staging")
+url := mgr.Resolve("{{base_url}}/users") // "https://staging.api.com/users"
+```
+
+## History
+
+Stores and retrieves past requests made through the console.
+
+```go
+type HistoryConfig struct {
+    Enabled  bool // Enable request history
+    MaxItems int  // Maximum stored entries (default 50)
+}
+```
+
+```go
+type HistoryEntry struct {
+    ID        string            // Unique entry identifier
+    Timestamp time.Time         // When the request was made
+    Method    string            // HTTP method
+    URL       string            // Full request URL
+    Headers   map[string]string // Request headers
+    Body      string            // Request body
+    Status    int               // Response status code
+    Duration  time.Duration     // Round-trip time
+}
+```
+
+```go
+type History struct {
+    // unexported fields
+}
+
+func NewHistory(cfg HistoryConfig) *History
+```
+
+### Methods
+
+```go
+func (h *History) Add(entry HistoryEntry)
+```
+
+Stores a new entry. If `MaxItems` is reached, the oldest entry is evicted.
+
+```go
+func (h *History) List() []HistoryEntry
+```
+
+Returns all entries in reverse chronological order.
+
+```go
+func (h *History) Clear()
+```
+
+Removes all stored entries.
+
+```go
+func (h *History) Get(id string) (*HistoryEntry, error)
+```
+
+Retrieves a single entry by ID.
+
+### Usage
+
+```go
+hist := tryit.NewHistory(tryit.HistoryConfig{
+    Enabled:  true,
+    MaxItems: 100,
+})
+
+hist.Add(tryit.HistoryEntry{
+    Method: "GET",
+    URL:    "https://api.example.com/users",
+    Status: 200,
+})
+
+entries := hist.List()
+```
+
+## Snippets Sub-Package
+
+`pkg/tryit/snippets` generates ready-to-use code snippets from a request definition.
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/tryit/snippets"
+```
+
+### SnippetsConfig
+
+```go
+type SnippetsConfig struct {
+    Languages []string // Enabled languages: "curl", "javascript", "go", "python", "php"
+}
+```
+
+### Generator
+
+```go
+type Generator struct {
+    // unexported fields
+}
+
+func New(cfg SnippetsConfig) *Generator
+```
+
+### Request
+
+Input type describing the HTTP request to generate a snippet for.
+
+```go
+type Request struct {
+    Method  string
+    URL     string
+    Headers map[string]string
+    Body    string
+}
+```
+
+### Methods
+
+```go
+func (g *Generator) Generate(req Request, lang string) (string, error)
+```
+
+Returns a code snippet for the given request in the specified language. Returns an error if the language is not enabled.
+
+```go
+func (g *Generator) Languages() []string
+```
+
+Returns the list of enabled languages.
+
+### Usage
+
+```go
+gen := snippets.New(snippets.SnippetsConfig{
+    Languages: []string{"curl", "javascript", "go", "python", "php"},
+})
+
+snippet, _ := gen.Generate(snippets.Request{
+    Method:  "POST",
+    URL:     "https://api.example.com/users",
+    Headers: map[string]string{"Content-Type": "application/json"},
+    Body:    `{"name": "Alice"}`,
+}, "curl")
+
+// Output:
+// curl -X POST https://api.example.com/users \
+//   -H "Content-Type: application/json" \
+//   -d '{"name": "Alice"}'
+```

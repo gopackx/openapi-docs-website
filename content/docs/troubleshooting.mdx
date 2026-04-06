@@ -1,0 +1,199 @@
+---
+title: Troubleshooting
+description: Solutions for common issues with CORS, spec generation, framework mounting, and more.
+---
+
+## CORS Issues
+
+### Try-It Console Returns CORS Errors
+
+**Symptom:** The try-it console shows `CORS error` or `Failed to fetch` when making requests.
+
+**Cause:** Your API server doesn't include the correct CORS headers, or the browser blocks cross-origin requests from the docs UI to your API.
+
+**Solution:** Configure CORS on your API server to allow requests from the docs origin:
+
+```go
+import "github.com/rs/cors"
+
+c := cors.New(cors.Options{
+    AllowedOrigins:   []string{"https://docs.example.com"},
+    AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+    AllowedHeaders:   []string{"Authorization", "Content-Type"},
+    AllowCredentials: true,
+})
+
+handler := c.Handler(router)
+```
+
+Alternatively, configure a CORS proxy in the UI config:
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:   "My API",
+    Version: "1.0.0",
+    UIConfig: openswag.UIConfig{
+        CORSProxyURL: "https://cors-proxy.internal.example.com",
+    },
+})
+```
+
+---
+
+## Spec Generation Failures
+
+### Spec Generation Panics on Nil Pointer
+
+**Symptom:** `panic: runtime error: invalid memory address or nil pointer dereference` when generating the spec.
+
+**Cause:** An endpoint has a nil `Response` or `RequestBody` field that the generator tries to dereference.
+
+**Solution:** Ensure all required fields are set on your endpoints:
+
+```go
+docs.AddEndpoint(openswag.Endpoint{
+    Method:  "GET",
+    Path:    "/api/users",
+    Summary: "List users",
+    Response: openswag.Response{
+        Status:      200,
+        Description: "Success", // Don't leave this empty
+        Body:        openswag.BodyFrom[[]User](),
+    },
+})
+```
+
+### Struct Fields Not Appearing in Schema
+
+**Symptom:** Some struct fields are missing from the generated OpenAPI schema.
+
+**Cause:** Fields without a `json` struct tag or unexported fields are skipped by the schema generator.
+
+**Solution:** Add `json` tags to all fields you want in the schema:
+
+```go
+// Bad — Name is exported but has no json tag, ID is unexported
+type User struct {
+    id   string
+    Name string
+}
+
+// Good
+type User struct {
+    ID   string `json:"id"`
+    Name string `json:"name"`
+}
+```
+
+### Circular Reference in Schema
+
+**Symptom:** `maximum recursion depth exceeded` or the spec generation hangs.
+
+**Cause:** Your Go structs have circular references (e.g., `User` has a field of type `*User`).
+
+**Solution:** Use pointer types for self-referencing fields. The schema generator handles `*T` by generating a `$ref` instead of inlining:
+
+```go
+type TreeNode struct {
+    Value    string      `json:"value"`
+    Children []*TreeNode `json:"children,omitempty"`
+}
+```
+
+---
+
+## Framework Mounting Problems
+
+### Chi: 404 on All Doc Routes
+
+**Symptom:** Mounting with Chi returns 404 for `/docs`, `/docs/openapi.json`, etc.
+
+**Cause:** Missing trailing wildcard in the route pattern.
+
+**Solution:** Use the adapter's `Mount` function instead of manual mounting:
+
+```go
+// Bad
+r.Handle("/docs", docs.Handler())
+
+// Good
+import chiadapter "github.com/gopackx/open-swag-go/adapters/chi"
+chiadapter.Mount(r, "/docs", docs)
+```
+
+### Gin: Conflicting Route Handlers
+
+**Symptom:** `panic: handlers are already registered for this path` when mounting docs.
+
+**Cause:** Another route conflicts with the docs wildcard route.
+
+**Solution:** Use `MountGroup` to mount docs under a route group:
+
+```go
+import ginadapter "github.com/gopackx/open-swag-go/adapters/gin"
+
+api := r.Group("/api")
+ginadapter.MountGroup(api, "/docs", docs)
+```
+
+### Fiber: Docs Page Loads But UI Is Blank
+
+**Symptom:** The docs path returns HTML but the Scalar UI doesn't render.
+
+**Cause:** Fiber's default content type handling may interfere with static asset serving.
+
+**Solution:** Ensure the Fiber adapter is mounted correctly and static assets are served with proper MIME types:
+
+```go
+import fiberadapter "github.com/gopackx/open-swag-go/adapters/fiber"
+
+fiberadapter.Mount(app, "/docs", docs)
+```
+
+If the issue persists, check that no middleware is modifying response headers for the `/docs` path.
+
+### Echo: Middleware Blocking Doc Routes
+
+**Symptom:** Docs routes return 401 or 403 due to auth middleware.
+
+**Cause:** Global auth middleware applies to the docs routes.
+
+**Solution:** Mount docs before applying auth middleware, or use a group without the middleware:
+
+```go
+import echoadapter "github.com/gopackx/open-swag-go/adapters/echo"
+
+// Mount docs first (no auth)
+echoadapter.Mount(e, "/docs", docs)
+
+// Then apply auth middleware to API routes
+api := e.Group("/api", authMiddleware)
+```
+
+---
+
+## General Issues
+
+### Docs Work Locally But Not in Production
+
+**Symptom:** Everything works on `localhost` but the docs page is blank or returns errors in production.
+
+**Cause:** Common causes include reverse proxy stripping paths, missing environment variables, or HTTPS/HTTP mismatch.
+
+**Solution:**
+
+1. Check that your reverse proxy forwards the full path (including `/docs/openapi.json`)
+2. Verify environment variables for `DocsAuth` credentials are set
+3. Ensure the `Server` URL in your config matches the production URL:
+
+```go
+docs := openswag.New(openswag.Config{
+    Info: openswag.Info{
+        Title:   "My API",
+        Version: "1.0.0",
+    },
+    Servers: []openswag.Server{
+        {URL: "https://api.example.com", Description: "Production"},
+    },
+})
+```

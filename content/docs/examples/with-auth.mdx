@@ -1,0 +1,202 @@
+---
+title: Authentication Example
+description: Demonstrate multiple authentication schemes including Bearer, API key, and OAuth2 in a single API.
+---
+
+# Authentication Example
+
+This example shows how to configure multiple authentication schemes — Bearer tokens, API keys, and OAuth2 — and apply them to different endpoints. Some endpoints use a single scheme, others require multiple schemes simultaneously.
+
+## The Full Program
+
+```go title="main.go"
+package main
+
+import (
+	"fmt"
+	"net/http"
+
+	openswag "github.com/gopackx/open-swag-go"
+	"github.com/gopackx/open-swag-go/pkg/auth"
+)
+
+func main() {
+	// --- Define authentication schemes ---
+
+	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
+		Description:  "JWT access token obtained from /auth/login",
+		BearerFormat: "JWT",
+	})
+
+	apiKeyScheme := auth.APIKeyAuth(auth.APIKeyAuthConfig{
+		Name:        "X-API-Key",
+		In:          "header",
+		Description: "API key for service-to-service calls",
+	})
+
+	oauth2Scheme := auth.OAuth2(auth.OAuth2Config{
+		Description: "OAuth2 authorization code flow",
+		Flows: auth.OAuth2Flows{
+			AuthorizationCode: &auth.AuthorizationCodeFlow{
+				AuthorizationURL: "https://auth.example.com/authorize",
+				TokenURL:         "https://auth.example.com/token",
+				Scopes: map[string]string{
+					"read:users":  "Read user profiles",
+					"write:users": "Create and update users",
+					"admin":       "Full administrative access",
+				},
+			},
+		},
+	})
+
+	cfg := openswag.Config{
+		Info: openswag.Info{
+			Title:       "Multi-Auth API",
+			Version:     "1.0.0",
+			Description: "An API demonstrating multiple authentication schemes.",
+		},
+		Servers: []openswag.Server{
+			{URL: "http://localhost:8080"},
+		},
+	}
+
+	endpoints := []openswag.Endpoint{
+		// Public — no auth required
+		{
+			Method:  "POST",
+			Path:    "/auth/login",
+			Summary: "Login",
+			Description: "Authenticate with username and password. Returns a JWT.",
+			Tags:    []string{"Auth"},
+			RequestBody: &openswag.RequestBody{
+				Description: "Login credentials",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "JWT token", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Invalid credentials"},
+			},
+		},
+
+		// Bearer auth — standard user endpoints
+		{
+			Method:   "GET",
+			Path:     "/users/me",
+			Summary:  "Get current user",
+			Tags:     []string{"Users"},
+			Security: []auth.Scheme{bearerScheme},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "User profile", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Unauthorized"},
+			},
+		},
+
+		// API key auth — service-to-service
+		{
+			Method:   "GET",
+			Path:     "/internal/health",
+			Summary:  "Internal health check",
+			Description: "Used by monitoring services. Requires an API key.",
+			Tags:     []string{"Internal"},
+			Security: []auth.Scheme{apiKeyScheme},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Service healthy", ContentType: "application/json"},
+				{StatusCode: 403, Description: "Invalid API key"},
+			},
+		},
+
+		// OAuth2 — third-party integrations
+		{
+			Method:   "GET",
+			Path:     "/users",
+			Summary:  "List users",
+			Description: "Returns all users. Requires OAuth2 read:users scope.",
+			Tags:     []string{"Users"},
+			Security: []auth.Scheme{oauth2Scheme},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "User list", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Unauthorized"},
+				{StatusCode: 403, Description: "Insufficient scope"},
+			},
+		},
+
+		// Multiple schemes — admin endpoints require both bearer AND API key
+		{
+			Method:   "DELETE",
+			Path:     "/users/{id}",
+			Summary:  "Delete a user",
+			Description: "Permanently removes a user. Requires both a JWT and an API key.",
+			Tags:     []string{"Admin"},
+			Security: []auth.Scheme{bearerScheme, apiKeyScheme},
+			Parameters: []openswag.Parameter{
+				{Name: "id", In: "path", Required: true, Description: "User ID"},
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 204, Description: "User deleted"},
+				{StatusCode: 401, Description: "Unauthorized"},
+				{StatusCode: 403, Description: "Forbidden — missing API key"},
+				{StatusCode: 404, Description: "User not found"},
+			},
+		},
+		{
+			Method:   "POST",
+			Path:     "/admin/config",
+			Summary:  "Update system config",
+			Description: "Modifies global settings. Requires both a JWT and an API key.",
+			Tags:     []string{"Admin"},
+			Security: []auth.Scheme{bearerScheme, apiKeyScheme},
+			RequestBody: &openswag.RequestBody{
+				Description: "Configuration payload",
+				ContentType: "application/json",
+				Required:    true,
+			},
+			Responses: []openswag.Response{
+				{StatusCode: 200, Description: "Config updated", ContentType: "application/json"},
+				{StatusCode: 401, Description: "Unauthorized"},
+				{StatusCode: 403, Description: "Forbidden"},
+			},
+		},
+	}
+
+	docs := openswag.New(cfg, endpoints...)
+
+	mux := http.NewServeMux()
+	openswag.Mount(mux, "/docs", docs)
+
+	fmt.Println("Multi-Auth API docs at http://localhost:8080/docs")
+	http.ListenAndServe(":8080", mux)
+}
+```
+
+## Key Concepts
+
+### Three authentication schemes
+
+This example registers three distinct schemes that appear in the OpenAPI spec's `securitySchemes` section:
+
+| Scheme | Type | Use case |
+|--------|------|----------|
+| `bearerScheme` | HTTP Bearer (JWT) | User-facing endpoints |
+| `apiKeyScheme` | API Key (header) | Service-to-service calls |
+| `oauth2Scheme` | OAuth2 (authorization code) | Third-party integrations |
+
+### Per-endpoint security
+
+Each endpoint declares which scheme(s) it requires via the `Security` field. Endpoints without `Security` are public (like `/auth/login`).
+
+### Combining multiple schemes
+
+The admin endpoints (`DELETE /users/{id}`, `POST /admin/config`) pass both `bearerScheme` and `apiKeyScheme` in the `Security` slice. This means the client must provide both a valid JWT and a valid API key — a logical AND.
+
+### OAuth2 scopes
+
+The OAuth2 scheme defines granular scopes (`read:users`, `write:users`, `admin`). The docs UI shows these scopes and lets consumers understand what permissions each endpoint requires.
+
+## Run It
+
+```bash
+go run main.go
+```
+
+Open [http://localhost:8080/docs](http://localhost:8080/docs). The docs UI groups endpoints by tag and shows a lock icon on authenticated endpoints. Click "Authorize" to enter credentials for each scheme.

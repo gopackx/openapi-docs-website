@@ -1,0 +1,239 @@
+---
+title: Versioning Package
+description: API reference for pkg/versioning — spec diffing, breaking change detection, changelog generation, and migration guides.
+---
+
+# Versioning Package
+
+`pkg/versioning` compares OpenAPI specs across versions, detects breaking changes, and generates changelogs and migration guides.
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/versioning"
+```
+
+## Differ
+
+Compares two OpenAPI specs and produces a structured diff.
+
+```go
+type Differ struct {
+    // unexported fields
+}
+
+func NewDiffer() *Differ
+```
+
+### Methods
+
+```go
+func (d *Differ) Diff(old, new []byte) (*Diff, error)
+```
+
+Accepts two JSON-encoded OpenAPI specs and returns a `Diff` describing every change. Returns an error if either spec is malformed.
+
+```go
+func (d *Differ) DiffFromFiles(oldPath, newPath string) (*Diff, error)
+```
+
+Convenience wrapper that reads specs from file paths before diffing.
+
+### Usage
+
+```go
+differ := versioning.NewDiffer()
+
+diff, err := differ.Diff(oldSpec, newSpec)
+if err != nil {
+    log.Fatal(err)
+}
+
+fmt.Printf("Total changes: %d\n", len(diff.Changes))
+fmt.Printf("Breaking: %d\n", len(diff.BreakingChanges))
+```
+
+## Diff
+
+The result of comparing two specs.
+
+```go
+type Diff struct {
+    Changes         []Change         // All detected changes
+    BreakingChanges []BreakingChange // Subset of changes that are breaking
+    Summary         string           // Human-readable summary
+}
+```
+
+## Change
+
+A single difference between two spec versions.
+
+```go
+type Change struct {
+    Type        ChangeType // added, removed, modified
+    Path        string     // JSON pointer to the changed element, e.g. "/paths/~1users/get"
+    Description string     // Human-readable description of the change
+    Breaking    bool       // Whether this change is breaking
+}
+```
+
+### ChangeType Constants
+
+```go
+type ChangeType string
+
+const (
+    ChangeAdded    ChangeType = "added"
+    ChangeRemoved  ChangeType = "removed"
+    ChangeModified ChangeType = "modified"
+)
+```
+
+## BreakingChange
+
+A change that may break existing API consumers.
+
+```go
+type BreakingChange struct {
+    Change                        // Embeds Change
+    Severity    Severity          // low, medium, high
+    Migration   string            // Suggested migration step
+}
+```
+
+### Severity Constants
+
+```go
+type Severity string
+
+const (
+    SeverityLow    Severity = "low"
+    SeverityMedium Severity = "medium"
+    SeverityHigh   Severity = "high"
+)
+```
+
+Breaking changes are classified by severity:
+
+| Severity | Examples |
+|----------|----------|
+| High | Endpoint removed, required parameter added, response schema field removed |
+| Medium | Parameter type changed, response status code changed |
+| Low | Description changed, example updated, optional field added |
+
+## ChangelogGenerator
+
+Produces a human-readable changelog from a `Diff`.
+
+```go
+type ChangelogGenerator struct {
+    // unexported fields
+}
+
+func NewChangelogGenerator() *ChangelogGenerator
+```
+
+### Methods
+
+```go
+func (g *ChangelogGenerator) Generate(diff *Diff) string
+```
+
+Returns a Markdown-formatted changelog string.
+
+```go
+func (g *ChangelogGenerator) GenerateToFile(diff *Diff, path string) error
+```
+
+Writes the changelog to a file.
+
+### Usage
+
+```go
+gen := versioning.NewChangelogGenerator()
+changelog := gen.Generate(diff)
+fmt.Println(changelog)
+```
+
+Output:
+
+```markdown
+## Changelog
+
+### Breaking Changes
+- **DELETE** `/users/{id}` — Endpoint removed (high severity)
+- **PUT** `/users/{id}` — Required field `email` added to request body (medium severity)
+
+### Non-Breaking Changes
+- **POST** `/users` — Added optional `nickname` field to request body
+- **GET** `/products` — New `category` query parameter
+```
+
+## MigrationGenerator
+
+Produces step-by-step migration instructions from breaking changes.
+
+```go
+type MigrationGenerator struct {
+    // unexported fields
+}
+
+func NewMigrationGenerator() *MigrationGenerator
+```
+
+### Methods
+
+```go
+func (g *MigrationGenerator) Generate(diff *Diff) string
+```
+
+Returns a Markdown-formatted migration guide covering only breaking changes.
+
+```go
+func (g *MigrationGenerator) GenerateToFile(diff *Diff, path string) error
+```
+
+Writes the migration guide to a file.
+
+### Usage
+
+```go
+mgen := versioning.NewMigrationGenerator()
+guide := mgen.Generate(diff)
+fmt.Println(guide)
+```
+
+## Quick Example
+
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "os"
+
+    "github.com/gopackx/open-swag-go/pkg/versioning"
+)
+
+func main() {
+    oldSpec, _ := os.ReadFile("spec-v1.json")
+    newSpec, _ := os.ReadFile("spec-v2.json")
+
+    differ := versioning.NewDiffer()
+    diff, err := differ.Diff(oldSpec, newSpec)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Changes: %d, Breaking: %d\n",
+        len(diff.Changes), len(diff.BreakingChanges))
+
+    changelog := versioning.NewChangelogGenerator().Generate(diff)
+    fmt.Println(changelog)
+
+    if len(diff.BreakingChanges) > 0 {
+        guide := versioning.NewMigrationGenerator().Generate(diff)
+        os.WriteFile("MIGRATION.md", []byte(guide), 0644)
+    }
+}
+```

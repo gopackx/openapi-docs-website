@@ -1,0 +1,38 @@
+---
+title: Installation
+description: Install the open-swag-go package and add it to your Go project.
+---
+
+# Installation
+
+## Requirements
+
+- **Go 1.21** or later
+
+## Install
+
+Add `open-swag-go` to your module:
+
+```bash
+go get github.com/gopackx/open-swag-go
+```
+
+Then import it:
+
+```go
+import openswag "github.com/gopackx/open-swag-go"
+```
+
+## Framework Adapters
+
+If you're using a specific web framework, install the corresponding adapter package:
+
+| Framework | Package |
+|-----------|---------|
+| Chi | `go get github.com/gopackx/open-swag-go/adapters/chi` |
+| Gin | `go get github.com/gopackx/open-swag-go/adapters/gin` |
+| Echo | `go get github.com/gopackx/open-swag-go/adapters/echo` |
+| Fiber | `go get github.com/gopackx/open-swag-go/adapters/fiber` |
+| net/http | Built-in — no extra package needed |
+
+See the [Adapters overview](/docs/adapters/overview) for a full comparison, or jump straight to the [Quick Start](/docs/getting-started/quick-start) to run your first documented API.

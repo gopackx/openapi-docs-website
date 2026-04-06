@@ -1,0 +1,15 @@
+{
+  "title": "Features",
+  "pages": [
+    "endpoints",
+    "authentication",
+    "auth-playground",
+    "try-it-console",
+    "code-snippets",
+    "version-diffing",
+    "schema-generation",
+    "theming",
+    "docs-auth",
+    "example-generator"
+  ]
+}

@@ -1,0 +1,355 @@
+---
+title: TypeScript Type Generation
+description: Generate type-safe TypeScript types from your OpenAPI spec using openapi-typescript, openapi-fetch, and orval.
+---
+
+import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
+
+## Exporting Your OpenAPI Spec
+
+`openapi-typescript` can generate types directly from a running server — no need to export to a file first. There are two approaches:
+
+### Option 1: Generate from a running server (recommended)
+
+If your Go API is running and serves the OpenAPI spec at an endpoint (e.g. `/docs/json`), you can point `openapi-typescript` directly at it:
+
+<Tabs items={['npm', 'bun']}>
+  <Tab value="npm">
+    ```json title="package.json"
+    {
+      "scripts": {
+        "generate:api-schema": "npx openapi-typescript http://localhost:3434/docs/json -o ./app/types/api-schema.ts"
+      }
+    }
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```json title="package.json"
+    {
+      "scripts": {
+        "generate:api-schema": "bunx openapi-typescript http://localhost:3434/docs/json -o ./app/types/api-schema.ts"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+Start your Go server, then run:
+
+<Tabs items={['npm', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm run generate:api-schema
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun run generate:api-schema
+    ```
+  </Tab>
+</Tabs>
+
+This fetches the live spec and generates types in one step. Adjust the URL and port to match your server configuration.
+
+### Option 2: Export to a file first
+
+If you prefer to work with a local file (useful for CI/CD or offline generation), export the spec from your Go app:
+
+```go title="cmd/generate-spec/main.go"
+package main
+
+import (
+    "encoding/json"
+    "os"
+
+    openswag "github.com/gopackx/open-swag-go"
+)
+
+func main() {
+    docs := openswag.New(openswag.Config{
+        Title:   "My API",
+        Version: "1.0.0",
+    })
+
+    // Register your endpoints
+    registerEndpoints(docs)
+
+    spec, err := docs.GenerateSpec()
+    if err != nil {
+        panic(err)
+    }
+
+    data, _ := json.MarshalIndent(spec, "", "  ")
+    os.WriteFile("openapi.json", data, 0644)
+}
+```
+
+```bash
+go run cmd/generate-spec/main.go
+```
+
+Or curl it from a running server:
+
+```bash
+curl http://localhost:3434/docs/json -o openapi.json
+```
+
+Then generate types from the file:
+
+<Tabs items={['npm', 'bun']}>
+  <Tab value="npm">
+    ```json title="package.json"
+    {
+      "scripts": {
+        "generate:api-schema": "npx openapi-typescript ./openapi.json -o ./app/types/api-schema.ts"
+      }
+    }
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```json title="package.json"
+    {
+      "scripts": {
+        "generate:api-schema": "bunx openapi-typescript ./openapi.json -o ./app/types/api-schema.ts"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## openapi-typescript
+
+[openapi-typescript](https://openapi-ts.dev/) generates TypeScript types directly from an OpenAPI spec. It produces type definitions only — no runtime code.
+
+### Setup
+
+<Tabs items={['npm', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm install -D openapi-typescript
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add -d openapi-typescript
+    ```
+  </Tab>
+</Tabs>
+
+Then add a `generate:api-schema` script as shown in [Exporting Your OpenAPI Spec](#exporting-your-openapi-spec) above and run it.
+
+### Usage
+
+```typescript title="src/api/client.ts"
+import type { paths } from './types';
+
+type ListUsersResponse = paths['/api/users']['get']['responses']['200']['content']['application/json'];
+type CreateUserBody = paths['/api/users']['post']['requestBody']['content']['application/json'];
+```
+
+## openapi-fetch
+
+[openapi-fetch](https://openapi-ts.dev/openapi-fetch/) builds on openapi-typescript to provide a type-safe fetch client with zero runtime overhead.
+
+### Setup
+
+<Tabs items={['npm', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm install openapi-fetch
+    npm install -D openapi-typescript
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add openapi-fetch
+    bun add -d openapi-typescript
+    ```
+  </Tab>
+</Tabs>
+
+Generate types first, then create a client:
+
+```typescript title="src/api/client.ts"
+import createClient from 'openapi-fetch';
+import type { paths } from './types';
+
+const client = createClient<paths>({
+  baseUrl: 'https://api.example.com',
+});
+
+// Fully typed — params, body, and response are all inferred
+const { data, error } = await client.GET('/api/users', {
+  params: {
+    query: { page: 1, limit: 20 },
+  },
+});
+
+// data is typed as ListUsersResponse
+// error is typed as the error response
+```
+
+### Usage with React
+
+```typescript title="src/hooks/useUsers.ts"
+import { useEffect, useState } from 'react';
+import { client } from '../api/client';
+
+export function useUsers(page: number) {
+  const [users, setUsers] = useState<Awaited<ReturnType<typeof fetchUsers>>>();
+
+  async function fetchUsers() {
+    const { data } = await client.GET('/api/users', {
+      params: { query: { page } },
+    });
+    return data;
+  }
+
+  useEffect(() => {
+    fetchUsers().then(setUsers);
+  }, [page]);
+
+  return users;
+}
+```
+
+### Usage with Next.js Server Components
+
+```typescript title="app/users/page.tsx"
+import { client } from '@/api/client';
+
+export default async function UsersPage() {
+  const { data } = await client.GET('/api/users', {
+    params: { query: { page: 1 } },
+  });
+
+  return (
+    <ul>
+      {data?.users.map(user => (
+        <li key={user.id}>{user.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+## Orval
+
+[Orval](https://orval.dev/) generates a complete API client with React Query hooks, Axios instances, or custom HTTP clients.
+
+### Setup
+
+<Tabs items={['npm', 'bun']}>
+  <Tab value="npm">
+    ```bash
+    npm install -D orval
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```bash
+    bun add -d orval
+    ```
+  </Tab>
+</Tabs>
+
+Create a configuration file:
+
+```typescript title="orval.config.ts"
+import { defineConfig } from 'orval';
+
+export default defineConfig({
+  api: {
+    input: './openapi.json',
+    output: {
+      target: './src/api/generated.ts',
+      client: 'react-query',
+      mode: 'tags-split',
+    },
+  },
+});
+```
+
+Add a script:
+
+<Tabs items={['npm', 'bun']}>
+  <Tab value="npm">
+    ```json title="package.json"
+    {
+      "scripts": {
+        "generate:api": "npx orval"
+      }
+    }
+    ```
+  </Tab>
+  <Tab value="bun">
+    ```json title="package.json"
+    {
+      "scripts": {
+        "generate:api": "bunx orval"
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Usage with React Query
+
+```typescript title="src/components/UserList.tsx"
+import { useListUsers } from '../api/generated/users';
+
+export function UserList() {
+  const { data, isLoading } = useListUsers({ page: 1, limit: 20 });
+
+  if (isLoading) return <div>Loading...</div>;
+
+  return (
+    <ul>
+      {data?.users.map(user => (
+        <li key={user.id}>{user.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Usage with Vue
+
+```typescript title="orval.config.ts"
+import { defineConfig } from 'orval';
+
+export default defineConfig({
+  api: {
+    input: './openapi.json',
+    output: {
+      target: './src/api/generated.ts',
+      client: 'vue-query',
+    },
+  },
+});
+```
+
+```vue title="src/components/UserList.vue"
+<script setup lang="ts">
+import { useListUsers } from '../api/generated/users';
+
+const { data, isLoading } = useListUsers({ page: 1, limit: 20 });
+</script>
+
+<template>
+  <div v-if="isLoading">Loading...</div>
+  <ul v-else>
+    <li v-for="user in data?.users" :key="user.id">{{ user.name }}</li>
+  </ul>
+</template>
+```
+
+## Comparison
+
+| Feature | openapi-typescript | openapi-fetch | Orval |
+|---------|-------------------|---------------|-------|
+| Types only | ✅ | ✅ | ✅ |
+| Fetch client | ❌ | ✅ | ✅ |
+| React Query hooks | ❌ | ❌ | ✅ |
+| Vue Query hooks | ❌ | ❌ | ✅ |
+| Runtime overhead | None | Minimal | Varies |
+| Custom HTTP client | N/A | Fetch | Axios, Fetch, Angular |

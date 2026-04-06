@@ -1,0 +1,206 @@
+---
+title: Migration Guide
+description: Step-by-step guide for migrating between open-swag-go versions with before/after code comparisons.
+---
+
+## Migrating from v0.x to v1.0
+
+### Config Structure
+
+The `Config` struct was restructured to group related settings.
+
+#### Before
+
+```go
+docs := openswag.New(openswag.Config{
+    Title:       "My API",
+    Version:     "1.0.0",
+    BasePath:    "/api",
+    DocsPath:    "/docs",
+    Theme:       "purple",
+    DarkMode:    true,
+})
+```
+
+#### After
+
+```go
+docs := openswag.New(openswag.Config{
+    Info: openswag.Info{
+        Title:   "My API",
+        Version: "1.0.0",
+    },
+    BasePath: "/api",
+    DocsPath: "/docs",
+    UIConfig: openswag.UIConfig{
+        Theme:    "purple",
+        DarkMode: true,
+    },
+})
+```
+
+### Endpoint Definitions
+
+Endpoints now use struct-based parameter definitions instead of inline strings.
+
+#### Before
+
+```go
+docs.AddEndpoint(openswag.Endpoint{
+    Method:  "GET",
+    Path:    "/users/{id}",
+    Summary: "Get user",
+    Params: map[string]string{
+        "id": "string",
+    },
+    Response: `{"id": "string", "name": "string"}`,
+})
+```
+
+#### After
+
+```go
+type GetUserParams struct {
+    ID string `json:"id" swagger:"path,required" description:"User ID"`
+}
+
+type User struct {
+    ID   string `json:"id" example:"usr_123"`
+    Name string `json:"name" example:"Jane Doe"`
+}
+
+docs.AddEndpoint(openswag.Endpoint{
+    Method:     "GET",
+    Path:       "/users/{id}",
+    Summary:    "Get user",
+    Parameters: openswag.ParamsFrom[GetUserParams](),
+    Response: openswag.Response{
+        Status:      200,
+        Description: "User found",
+        Body:        openswag.BodyFrom[User](),
+    },
+})
+```
+
+### Authentication Schemes
+
+Auth schemes moved from inline config to the `pkg/auth` package.
+
+#### Before
+
+```go
+docs := openswag.New(openswag.Config{
+    Auth: openswag.Auth{
+        Type:   "bearer",
+        Scheme: "JWT",
+    },
+})
+```
+
+#### After
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/auth"
+
+bearerAuth := auth.BearerAuth("jwt", "JWT Authentication")
+
+docs := openswag.New(openswag.Config{
+    Info: openswag.Info{
+        Title:   "My API",
+        Version: "1.0.0",
+    },
+    SecuritySchemes: []auth.Scheme{bearerAuth},
+})
+```
+
+### Framework Adapter Mounting
+
+Adapter mounting functions were unified across all frameworks.
+
+#### Before
+
+```go
+// Chi
+r.Handle("/docs/*", docs.Handler())
+
+// Gin
+r.Any("/docs/*any", gin.WrapH(docs.Handler()))
+```
+
+#### After
+
+```go
+// Chi
+import chiadapter "github.com/gopackx/open-swag-go/adapters/chi"
+chiadapter.Mount(r, "/docs", docs)
+
+// Gin
+import ginadapter "github.com/gopackx/open-swag-go/adapters/gin"
+ginadapter.Mount(r, "/docs", docs)
+```
+
+### Schema Generation Tags
+
+The `swagger` struct tag syntax was updated for clarity.
+
+#### Before
+
+```go
+type Product struct {
+    ID    int     `json:"id" swagger:"integer,required"`
+    Price float64 `json:"price" swagger:"number,format=double"`
+}
+```
+
+#### After
+
+```go
+type Product struct {
+    ID    int     `json:"id" swagger:"required" format:"int64"`
+    Price float64 `json:"price" format:"double" example:"29.99"`
+}
+```
+
+### Try-It Console
+
+Console configuration moved to a dedicated package.
+
+#### Before
+
+```go
+docs := openswag.New(openswag.Config{
+    Console: true,
+    ConsoleTheme: "dark",
+})
+```
+
+#### After
+
+```go
+import "github.com/gopackx/open-swag-go/pkg/tryit"
+
+console := tryit.NewConsoleConfig(
+    tryit.WithEnabled(true),
+    tryit.WithTheme("dark"),
+    tryit.WithHistory(true),
+)
+
+docs := openswag.New(openswag.Config{
+    Info: openswag.Info{
+        Title:   "My API",
+        Version: "1.0.0",
+    },
+    ConsoleConfig: console,
+})
+```
+
+## Migration Checklist
+
+- [ ] Update `Config` to use nested `Info` and `UIConfig` structs
+- [ ] Convert inline parameter definitions to struct-based `ParamsFrom[T]()`
+- [ ] Move auth configuration to `pkg/auth` package
+- [ ] Update framework adapter mounting to use adapter-specific `Mount()` functions
+- [ ] Update struct tags to new `swagger` tag syntax
+- [ ] Migrate console configuration to `pkg/tryit` package
+- [ ] Run `go vet` and fix any compilation errors
+- [ ] Regenerate your OpenAPI spec and verify output

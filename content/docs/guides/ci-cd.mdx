@@ -1,0 +1,226 @@
+---
+title: CI/CD Integration
+description: Automate OpenAPI spec generation, breaking change detection, and TypeScript type generation in your CI/CD pipeline.
+---
+
+## Automated Spec Generation
+
+Generate your OpenAPI spec as part of your CI/CD pipeline to ensure the spec always matches your code.
+
+```yaml title=".github/workflows/docs.yml"
+name: Generate OpenAPI Spec
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  generate-spec:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Generate OpenAPI spec
+        run: go run cmd/generate-spec/main.go
+
+      - name: Upload spec artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: openapi.json
+```
+
+### Spec Generation Script
+
+Create a dedicated command for spec generation:
+
+```go title="cmd/generate-spec/main.go"
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "os"
+
+    openswag "github.com/gopackx/open-swag-go"
+)
+
+func main() {
+    docs := openswag.New(openswag.Config{
+        Title:   "My API",
+        Version: os.Getenv("API_VERSION"),
+    })
+
+    // Register endpoints (import from your app)
+    registerEndpoints(docs)
+
+    spec, err := docs.GenerateSpec()
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to generate spec: %v\n", err)
+        os.Exit(1)
+    }
+
+    data, _ := json.MarshalIndent(spec, "", "  ")
+    if err := os.WriteFile("openapi.json", data, 0644); err != nil {
+        fmt.Fprintf(os.Stderr, "Failed to write spec: %v\n", err)
+        os.Exit(1)
+    }
+
+    fmt.Println("OpenAPI spec generated successfully")
+}
+```
+
+## Breaking Change Detection
+
+Use the versioning package to detect breaking changes between spec versions in your CI pipeline. Fail the build if breaking changes are introduced without a major version bump.
+
+```yaml title=".github/workflows/breaking-changes.yml"
+name: Breaking Change Detection
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-breaking:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Generate current spec
+        run: go run cmd/generate-spec/main.go -o openapi-new.json
+
+      - name: Get previous spec
+        run: |
+          git show main:openapi.json > openapi-old.json
+
+      - name: Check for breaking changes
+        run: go run cmd/check-breaking/main.go openapi-old.json openapi-new.json
+```
+
+### Breaking Change Checker Script
+
+```go title="cmd/check-breaking/main.go"
+package main
+
+import (
+    "fmt"
+    "os"
+
+    "github.com/gopackx/open-swag-go/pkg/versioning"
+)
+
+func main() {
+    if len(os.Args) < 3 {
+        fmt.Fprintln(os.Stderr, "Usage: check-breaking <old-spec> <new-spec>")
+        os.Exit(1)
+    }
+
+    differ := versioning.NewDiffer()
+    diff, err := differ.DiffFiles(os.Args[1], os.Args[2])
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+        os.Exit(1)
+    }
+
+    if len(diff.BreakingChanges) > 0 {
+        fmt.Println("⚠️  Breaking changes detected:")
+        for _, bc := range diff.BreakingChanges {
+            fmt.Printf("  - %s: %s\n", bc.Path, bc.Description)
+        }
+        os.Exit(1)
+    }
+
+    fmt.Println("✅ No breaking changes detected")
+}
+```
+
+## TypeScript Type Generation
+
+Generate TypeScript types from your OpenAPI spec for type-safe frontend API calls. Run this as a post-build step.
+
+```yaml title=".github/workflows/types.yml"
+name: Generate TypeScript Types
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  generate-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Generate OpenAPI spec
+        run: go run cmd/generate-spec/main.go
+
+      - name: Generate TypeScript types
+        run: |
+          npx openapi-typescript openapi.json -o src/api/types.ts
+
+      - name: Commit generated types
+        run: |
+          git config user.name "CI Bot"
+          git config user.email "ci@example.com"
+          git add src/api/types.ts
+          git diff --cached --quiet || git commit -m "chore: update API types"
+          git push
+```
+
+## Complete Pipeline Example
+
+Combine all three steps into a single workflow:
+
+```yaml title=".github/workflows/api-pipeline.yml"
+name: API Documentation Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  api-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Generate spec
+        run: go run cmd/generate-spec/main.go
+
+      - name: Check breaking changes (PRs only)
+        if: github.event_name == 'pull_request'
+        run: |
+          git show main:openapi.json > openapi-old.json 2>/dev/null || echo '{}' > openapi-old.json
+          go run cmd/check-breaking/main.go openapi-old.json openapi.json
+
+      - name: Generate TypeScript types
+        if: github.ref == 'refs/heads/main'
+        run: npx openapi-typescript openapi.json -o src/api/types.ts
+```
