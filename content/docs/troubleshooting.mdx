@@ -67,9 +67,9 @@ docs.AddEndpoint(openswag.Endpoint{
 
 **Symptom:** Some struct fields are missing from the generated OpenAPI schema.
 
-**Cause:** Fields without a `json` struct tag or unexported fields are skipped by the schema generator.
+**Cause:** Fields without a `json` struct tag or unexported fields are skipped by the schema generator. In v1.0.x, embedded (anonymous) struct fields were also silently ignored.
 
-**Solution:** Add `json` tags to all fields you want in the schema:
+**Solution:** Add `json` tags to all fields you want in the schema. For embedded structs, upgrade to v1.1.0+ where field promotion is supported:
 
 ```go
 // Bad — Name is exported but has no json tag, ID is unexported
@@ -83,7 +83,50 @@ type User struct {
     ID   string `json:"id"`
     Name string `json:"name"`
 }
+
+// Good (v1.1.0+) — embedded fields are promoted
+type Timestamps struct {
+    CreatedAt time.Time `json:"created_at"`
+}
+
+type User struct {
+    Timestamps
+    ID   string `json:"id"`
+    Name string `json:"name"`
+}
 ```
+
+### Example Values Have Wrong Type in Spec
+
+**Symptom:** Example values like `example:"42"` appear as strings `"42"` instead of integers in the OpenAPI spec.
+
+**Cause:** In v1.0.x, example tag values were always stored as strings regardless of the field type.
+
+**Solution:** Upgrade to v1.1.0+. The `ConvertExampleToType` function now automatically coerces example strings to the correct type (`int64`, `float64`, `bool`, etc.) based on the field's Go type.
+
+### Map Fields Show as Empty Object
+
+**Symptom:** `map[string]T` fields generate `{"type":"object"}` without `additionalProperties`.
+
+**Cause:** In v1.0.x, map value schemas were not generated.
+
+**Solution:** Upgrade to v1.1.0+. Map types now correctly produce `{"type":"object","additionalProperties":{...}}` with the value type's schema.
+
+### interface{}/any Fields Show as Object Type
+
+**Symptom:** Fields typed as `interface{}` or `any` generate `{"type":"object"}` instead of accepting any value.
+
+**Cause:** In v1.0.x, `interface{}`/`any` types were incorrectly mapped to `{"type":"object"}`.
+
+**Solution:** Upgrade to v1.1.0+. These types now produce an empty schema `{}` which correctly accepts any JSON value.
+
+### Localhost Server URL Shows Garbled Characters
+
+**Symptom:** Using `CommonServers.Localhost(8080)` produces a URL with garbled characters instead of the port number.
+
+**Cause:** In v1.0.x, port numbers were converted using `string(rune(port))` which produces a Unicode character instead of the decimal string.
+
+**Solution:** Upgrade to v1.1.0+ where port conversion uses `strconv.Itoa(port)` correctly.
 
 ### Circular Reference in Schema
 

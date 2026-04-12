@@ -108,6 +108,36 @@ type Product struct {
 
 You can mix explicit tags and auto-generation. Fields with `example` tags use the tag value; fields without tags use heuristics or defaults.
 
+### Type-Aware Example Coercion (v1.1.0+)
+
+Example tag values are now automatically coerced to the correct type. Previously, `example:"42"` on an `int64` field would appear as a string `"42"` in the OpenAPI spec. Now it's correctly output as the integer `42`.
+
+```go title="typed_examples.go"
+type Product struct {
+	ID       int64   `json:"id"       example:"42"`      // → 42 (integer)
+	Price    float64 `json:"price"    example:"9.99"`     // → 9.99 (number)
+	Active   bool    `json:"active"   example:"true"`     // → true (boolean)
+	Name     string  `json:"name"     example:"Widget"`   // → "Widget" (string)
+}
+```
+
+This coercion is applied everywhere examples appear: schema generation, request body examples, and the OpenAPI spec output.
+
+## Request Body Auto-Examples (v1.1.0+)
+
+Request body schemas now automatically include a generated `example` field built from struct field tags and type defaults. You no longer need to manually craft example payloads — they're derived from your struct definitions.
+
+```go title="auto_body_example.go"
+type CreateOrderRequest struct {
+	ProductID int64  `json:"product_id" example:"7"`
+	Quantity  int    `json:"quantity"   example:"2"`
+	Note      string `json:"note"       example:"Gift wrap please"`
+}
+
+// The generated request body schema automatically includes:
+// "example": {"product_id": 7, "quantity": 2, "note": "Gift wrap please"}
+```
+
 ## Full Example
 
 A complete setup with the example generator and an endpoint:

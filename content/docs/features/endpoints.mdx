@@ -216,6 +216,26 @@ openswag.Endpoint{
 
 This approach keeps parameter definitions type-safe and co-located with the handler logic.
 
+### Location-Specific Tags (v1.1.0+)
+
+When building parameters from structs, open-swag-go now prefers location-specific tags over generic ones. Use the `query` tag for query parameter names and the `path` tag for path parameter names. The `json` tag is used as a fallback.
+
+```go title="location_tags.go"
+type SearchParams struct {
+	// "q" is used as the query parameter name (not "search_query")
+	Query    string `query:"q"       json:"search_query" description:"Search term"`
+	Page     int    `query:"page"    description:"Page number"     example:"1"`
+	PageSize int    `query:"per_page" json:"page_size" description:"Results per page" example:"25"`
+}
+
+type GetItemParams struct {
+	// "id" is used as the path parameter name (not "item_id")
+	ID int64 `path:"id" json:"item_id" description:"Item identifier" example:"42"`
+}
+```
+
+This gives you control over the external parameter name independently of the JSON field name used in serialization.
+
 ## Co-Located Endpoint Definitions
 
 A common pattern is to define endpoints right next to the handler functions they describe. This keeps documentation and implementation in sync and makes it easy to spot when they drift apart.

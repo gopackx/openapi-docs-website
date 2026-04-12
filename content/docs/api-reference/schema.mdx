@@ -17,16 +17,26 @@ The generated JSON Schema representation of a Go type.
 
 ```go
 type Schema struct {
-    Type        string              // OpenAPI type: "string", "integer", "number", "boolean", "array", "object"
-    Format      string              // Format hint: "int64", "float", "date-time", "email", etc.
-    Properties  map[string]*Schema  // Nested object properties
-    Items       *Schema             // Array element schema
-    Required    []string            // Required property names
-    Description string              // Field description
-    Example     interface{}         // Example value
-    Enum        []interface{}       // Allowed values
-    Nullable    bool                // Whether null is accepted
-    Ref         string              // $ref pointer for shared schemas
+    Type                 string              // OpenAPI type: "string", "integer", "number", "boolean", "array", "object"
+    Format               string              // Format hint: "int64", "float", "date-time", "email", etc.
+    Properties           map[string]*Schema  // Nested object properties
+    Items                *Schema             // Array element schema
+    AdditionalProperties *Schema             // Schema for map values (v1.1.0+)
+    Required             []string            // Required property names
+    Description          string              // Field description
+    Example              interface{}         // Example value
+    Enum                 []interface{}       // Allowed values
+    Nullable             bool                // Whether null is accepted
+    ReadOnly             bool                // Mark field as read-only (v1.1.0+)
+    WriteOnly            bool                // Mark field as write-only (v1.1.0+)
+    Deprecated           bool                // Mark field as deprecated (v1.1.0+)
+    MinItems             *int                // Minimum array length (v1.1.0+)
+    MaxItems             *int                // Maximum array length (v1.1.0+)
+    UniqueItems          bool                // Array items must be unique (v1.1.0+)
+    Ref                  string              // $ref pointer for shared schemas
+    AllOf                []*Schema           // Composition: must match all (v1.1.0+)
+    OneOf                []*Schema           // Composition: must match exactly one (v1.1.0+)
+    AnyOf                []*Schema           // Composition: must match at least one (v1.1.0+)
 }
 ```
 
@@ -36,7 +46,7 @@ type Schema struct {
 func Generate(v interface{}) *Schema
 ```
 
-Accepts any Go value (typically a struct) and returns its OpenAPI schema. Nested structs, slices, maps, and pointers are resolved recursively.
+Accepts any Go value (typically a struct) and returns its OpenAPI schema. Nested structs, slices, maps, and pointers are resolved recursively. Embedded (anonymous) struct fields are promoted into the parent schema (v1.1.0+).
 
 ```go
 type User struct {
@@ -49,6 +59,27 @@ s := schema.Generate(User{})
 // s.Type == "object"
 // s.Properties["id"].Type == "integer"
 // s.Properties["id"].Format == "int64"
+```
+
+#### Embedded Structs (v1.1.0+)
+
+Embedded (anonymous) struct fields have their properties promoted into the parent schema, matching Go's field promotion semantics:
+
+```go
+type Timestamps struct {
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+}
+
+type User struct {
+    Timestamps           // Embedded — fields are promoted
+    ID   int64  `json:"id"`
+    Name string `json:"name"`
+}
+
+s := schema.Generate(User{})
+// s.Properties has: "id", "name", "created_at", "updated_at"
+// Timestamps fields are promoted into User's schema
 ```
 
 ## Validator
@@ -69,7 +100,7 @@ func NewValidator() *Validator
 func (v *Validator) Validate(value interface{}, s *Schema) []ValidationError
 ```
 
-Returns a slice of validation errors. An empty slice means the value is valid.
+Returns a slice of validation errors. An empty slice means the value is valid. Empty schemas (from `interface{}`/`any` fields) accept any value (v1.1.0+).
 
 ```go
 func (v *Validator) ValidateJSON(data []byte, s *Schema) []ValidationError
@@ -112,10 +143,13 @@ The schema generator maps Go types to OpenAPI types automatically.
 | `float32` | `number` | `float` |
 | `float64` | `number` | `double` |
 | `[]T` | `array` | — (items = schema of T) |
+| `[]byte` | `string` | `byte` (v1.1.0+) |
 | `map[string]T` | `object` | — (additionalProperties = schema of T) |
 | `*T` | schema of T | — (nullable: true) |
 | `time.Time` | `string` | `date-time` |
+| `time.Duration` | `string` | `duration` (v1.1.0+) |
 | `uuid.UUID` | `string` | `uuid` |
+| `interface{}`/`any` | — (empty schema) | — accepts any type (v1.1.0+) |
 
 ## Tag Parsing
 
@@ -149,6 +183,17 @@ type TagInfo struct {
     Required    bool     // From swagger:"required" or validate:"required"
     OmitEmpty   bool     // From json:",omitempty"
     Enum        []string // From enum tag
+}
+```
+
+### Omitempty and Required Interaction (v1.1.0+)
+
+Fields with `json:",omitempty"` are never marked as required, even if `validate:"required"` is present. The `omitempty` tag takes precedence because it signals that the field is optional at the JSON level.
+
+```go
+type Product struct {
+    Name   string `json:"name"                validate:"required"` // required ✓
+    Status string `json:"status,omitempty"    validate:"required"` // NOT required (omitempty wins)
 }
 ```
 

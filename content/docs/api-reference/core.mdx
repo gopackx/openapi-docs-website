@@ -120,6 +120,8 @@ type RequestBody struct {
 }
 ```
 
+In v1.1.0+, request body schemas automatically include a generated `example` field built from struct field tags and type defaults. Example values are type-coerced (e.g. `example:"42"` on an `int64` field produces the integer `42`, not the string `"42"`).
+
 ## Response
 
 Describes a possible response for an endpoint.
@@ -238,6 +240,20 @@ type ListParams struct {
 }
 
 params := openswag.ParametersFromStruct(ListParams{})
+```
+
+In v1.1.0+, `ParametersFromStruct` prefers location-specific tags over generic tags. For query parameters, the `query` tag is used first; for path parameters, the `path` tag is used first. Generic tags (`json`, `description`, `example`) are used as fallbacks.
+
+```go
+type GetUserParams struct {
+    // path tag is preferred for path parameters
+    ID int64 `path:"id" json:"user_id" description:"User ID" example:"42"`
+}
+
+type ListUsersParams struct {
+    // query tag is preferred for query parameters
+    Status string `query:"status" json:"filter_status" description:"Filter by status"`
+}
 ```
 
 ## Quick Example

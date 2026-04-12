@@ -57,6 +57,32 @@ ex := gen.Generate(User{})
 // ex == User{ID: 42, Name: "Alice", Email: "alice@example.com"}
 ```
 
+## ConvertExampleToType (v1.1.0+)
+
+Coerces string example values from struct tags to the correct Go type based on the field's type.
+
+```go
+func ConvertExampleToType(value string, fieldType reflect.Type) interface{}
+```
+
+Prior to v1.1.0, example tag values were always stored as strings, even for numeric or boolean fields. This function ensures that `example:"42"` on an `int64` field produces the integer `42`, not the string `"42"`.
+
+Supported conversions:
+
+| Field Type | Input String | Result |
+|-----------|-------------|--------|
+| `int`, `int64` | `"42"` | `int64(42)` |
+| `float64` | `"9.99"` | `float64(9.99)` |
+| `bool` | `"true"` | `true` |
+| `[]interface{}` | `"[1,2,3]"` | `[]interface{}{1, 2, 3}` |
+
+```go
+// Previously: example:"42" on int64 field → "42" (string) in schema
+// Now:        example:"42" on int64 field → 42 (integer) in schema
+```
+
+This conversion is applied automatically in schema generation, example generation, and OpenAPI spec building.
+
 ## Faker
 
 Low-level value generator that produces realistic data based on field name heuristics.

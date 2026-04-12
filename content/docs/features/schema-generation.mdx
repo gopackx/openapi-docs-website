@@ -166,8 +166,108 @@ Open-swag-go maps Go types to OpenAPI types automatically:
 | `struct` | `object` | — |
 | `map[string]T` | `object` | additionalProperties: T |
 | `time.Time` | `string` | `date-time` |
+| `time.Duration` | `string` | `duration` (v1.1.0+) |
+| `[]byte` | `string` | `byte` (v1.1.0+) |
 | `*T` | same as T | `nullable: true` |
 | `uuid.UUID` | `string` | `uuid` |
+| `interface{}`/`any` | — (empty schema) | accepts any type (v1.1.0+) |
+
+## Embedded Structs (v1.1.0+)
+
+Embedded (anonymous) struct fields are automatically promoted into the parent schema, matching Go's field promotion behavior. This is useful for shared base types like timestamps or audit fields.
+
+```go title="embedded_structs.go"
+type Timestamps struct {
+	CreatedAt time.Time `json:"created_at" description:"When the record was created"`
+	UpdatedAt time.Time `json:"updated_at" description:"When the record was last updated"`
+}
+
+type User struct {
+	Timestamps                    // Embedded — fields promoted into User
+	ID         int64  `json:"id"`
+	Name       string `json:"name"`
+}
+```
+
+The generated schema for `User` includes `created_at` and `updated_at` as top-level properties alongside `id` and `name`.
+
+## Map Types (v1.1.0+)
+
+`map[K]V` types now correctly generate `{"type":"object","additionalProperties":{...}}` where the value schema describes `V`.
+
+```go title="map_types.go"
+type Config struct {
+	Labels   map[string]string `json:"labels"   description:"Key-value labels"`
+	Metadata map[string]any    `json:"metadata" description:"Arbitrary metadata"`
+}
+```
+
+```yaml title="generated_map_schema.yaml"
+type: object
+properties:
+  labels:
+    type: object
+    additionalProperties:
+      type: string
+  metadata:
+    type: object
+    additionalProperties: {}
+```
+
+## Interface and Any Types (v1.1.0+)
+
+Fields typed as `interface{}` or `any` now produce an empty schema `{}` (which accepts any JSON value) instead of incorrectly generating `{"type":"object"}`.
+
+```go title="any_fields.go"
+type Event struct {
+	Type    string `json:"type"    description:"Event type"`
+	Payload any    `json:"payload" description:"Event-specific data"`
+}
+```
+
+## Omitempty and Required Interaction (v1.1.0+)
+
+Fields with `json:",omitempty"` are never marked as required in the generated schema, even if `validate:"required"` or `swagger:"required"` is set. The `omitempty` tag takes precedence because it signals that the field is optional at the JSON serialization level.
+
+```go title="omitempty_required.go"
+type UpdateUserRequest struct {
+	Name  string `json:"name"            validate:"required"` // required ✓
+	Email string `json:"email,omitempty" validate:"required"` // NOT required (omitempty wins)
+	Phone string `json:"phone,omitempty"`                     // NOT required
+}
+```
+
+## Composition Keywords (v1.1.0+)
+
+The schema generator now supports `allOf`, `oneOf`, and `anyOf` composition keywords, as well as additional OpenAPI property annotations:
+
+| Annotation | Struct Tag | Effect |
+|-----------|-----------|--------|
+| `readOnly` | `swagger:"readOnly"` | Field is read-only (e.g. server-generated IDs) |
+| `writeOnly` | `swagger:"writeOnly"` | Field is write-only (e.g. passwords) |
+| `deprecated` | `swagger:"deprecated"` | Field is deprecated |
+| `minItems` | `validate:"min=N"` on slices | Minimum array length |
+| `maxItems` | `validate:"max=N"` on slices | Maximum array length |
+| `uniqueItems` | `validate:"unique"` | Array items must be unique |
+
+```go title="annotations.go"
+type User struct {
+	ID       string   `json:"id"       swagger:"readOnly"    description:"Server-generated ID"`
+	Password string   `json:"password" swagger:"writeOnly"   description:"User password"`
+	OldField string   `json:"old_field" swagger:"deprecated" description:"Use new_field instead"`
+	Tags     []string `json:"tags"     validate:"min=1,max=10,unique"`
+}
+```
+
+## Special Type Handling (v1.1.0+)
+
+Certain Go types receive special format annotations:
+
+| Go Type | Generated Format | Description |
+|---------|-----------------|-------------|
+| `time.Duration` | `duration` | ISO 8601 duration |
+| `[]byte` | `byte` | Base64-encoded binary data |
+| `uuid.UUID` | `uuid` | UUID string |
 
 ## Practical Examples
 

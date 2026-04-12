@@ -1,0 +1,52 @@
+---
+title: Changelog
+description: Release notes and version history for open-swag-go.
+---
+
+# Changelog
+
+## v1.1.0
+
+All 12 fixes are backwards-compatible — no public API signatures changed, only additive struct fields and behavior corrections.
+
+```bash
+go get github.com/gopackx/open-swag-go@v1.1.0
+```
+
+### Critical Fixes
+
+- **fix(spec):** Fixed port-to-string conversion in `CommonServers.Localhost()` and `LocalhostServer()` — replaced broken `string(rune(port))` with `strconv.Itoa(port)`. Also fixed the same pattern in `intToString()` in `openapi.go`.
+- **fix(schema):** Example tag values are now coerced to the correct type via `ConvertExampleToType()`. `example:"42"` on an `int64` field now produces the integer `42`, not the string `"42"`. Applied in `pkg/schema/tags.go`, `openapi.go`, and `pkg/examples/generator.go`.
+- **fix(schema):** `$ref` pointers are no longer silently dropped during schema conversion — added `Ref: s.Ref` mapping in `convertSchema()`.
+
+### High Severity Fixes
+
+- **fix(schema):** Embedded (anonymous) struct fields are now detected via `field.Anonymous` and their properties are promoted into the parent schema.
+- **fix(schema):** `map[K]V` types now correctly generate `{"type":"object","additionalProperties":{...}}`. Added `AdditionalProperties` field to `schema.Schema` and conversion in `convertSchema()`.
+- **fix(schema):** `interface{}`/`any` fields now produce an empty schema `{}` (accepts any type) instead of `{"type":"object"}`. Validator updated to accept empty schemas.
+
+### Medium Severity Fixes
+
+- **fix(schema):** Fields with `json:",omitempty"` are no longer marked as required even if `validate:"required"` is present.
+- **feat(schema):** Added `Nullable`, `ReadOnly`, `WriteOnly`, `Deprecated`, `MinItems`, `MaxItems`, `UniqueItems`, `AllOf`, `OneOf`, `AnyOf` fields to `schema.Schema` and full conversion support in `convertSchema()`.
+- **fix(schema):** Added special handling for `time.Duration` → `{format:"duration"}`, `[]byte` → `{format:"byte"}`, `uuid.UUID` → `{format:"uuid"}`.
+- **fix(schema):** `json:",omitempty"` (empty name part) now correctly falls back to the Go field name.
+
+### Low Severity Fixes
+
+- **fix(openapi):** `buildParamsFromStruct` now prefers location-specific tags (`query` tag for query params, `path` tag for path params) before falling back to generic tags.
+- **feat(openapi):** Request body schemas now include an auto-generated `example` field built from struct field tags and type defaults.
+
+## v1.0.0
+
+Initial release of open-swag-go.
+
+- 5 framework adapters: Chi, Gin, Echo, Fiber, net/http
+- Authentication playground with Bearer, Basic, API Key, Cookie, and OAuth2 support
+- Try-it console with environment management and request history
+- Auto-generated code snippets in curl, JavaScript, Go, Python, and PHP
+- Version diffing with breaking change detection and migration guides
+- Schema generation from Go structs using standard tags
+- Theming with Scalar UI (purple, blue, green, light themes + dark mode)
+- Docs page authentication with basic auth or API key
+- Smart example generation from struct field names and tags

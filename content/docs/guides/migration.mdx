@@ -3,6 +3,71 @@ title: Migration Guide
 description: Step-by-step guide for migrating between open-swag-go versions with before/after code comparisons.
 ---
 
+## Migrating from v1.0.x to v1.1.0
+
+v1.1.0 is fully backwards-compatible — no public API signatures changed. All fixes are additive struct fields and behavior corrections. Update by running:
+
+```bash
+go get github.com/gopackx/open-swag-go@v1.1.0
+```
+
+### What Changed
+
+#### Schema Generation Fixes
+
+**Embedded struct promotion** — Embedded (anonymous) struct fields now have their properties promoted into the parent schema, matching Go's field promotion behavior.
+
+```go
+// Before v1.1.0: Embedded fields were ignored
+// After v1.1.0: Embedded fields are promoted
+type Timestamps struct {
+    CreatedAt time.Time `json:"created_at"`
+    UpdatedAt time.Time `json:"updated_at"`
+}
+
+type User struct {
+    Timestamps // Now correctly promoted into User's schema
+    ID   int64  `json:"id"`
+}
+```
+
+**Map types generate additionalProperties** — `map[K]V` types now correctly produce `{"type":"object","additionalProperties":{...}}`.
+
+**interface{}/any produces empty schema** — Fields typed as `interface{}` or `any` now generate an empty schema `{}` (accepts any value) instead of `{"type":"object"}`.
+
+**omitempty overrides required** — Fields with `json:",omitempty"` are no longer marked as required, even if `validate:"required"` is set.
+
+**New schema fields** — `ReadOnly`, `WriteOnly`, `Deprecated`, `MinItems`, `MaxItems`, `UniqueItems`, `AllOf`, `OneOf`, `AnyOf`, and `AdditionalProperties` are now supported on the `Schema` struct.
+
+**Special type handling** — `time.Duration` → `{format:"duration"}`, `[]byte` → `{format:"byte"}`, `uuid.UUID` → `{format:"uuid"}`.
+
+**$ref preservation** — `$ref` pointers are no longer silently dropped during schema conversion.
+
+#### Example Generation Fixes
+
+**Type-coerced examples** — Example tag values are now coerced to the correct type. `example:"42"` on an `int64` field produces the integer `42` in the spec, not the string `"42"`.
+
+**Request body auto-examples** — Request body schemas now automatically include a generated `example` field built from struct tags and type defaults.
+
+#### Parameter Handling Fixes
+
+**Location-specific tags preferred** — `ParametersFromStruct` now prefers `query` tags for query params and `path` tags for path params before falling back to `json` tags.
+
+#### Server Configuration Fixes
+
+**Port conversion fix** — `CommonServers.Localhost()` and `LocalhostServer()` now correctly convert port numbers to strings (previously used invalid `string(rune(port))` conversion).
+
+### Migration Checklist
+
+- [ ] Run `go get github.com/gopackx/open-swag-go@v1.1.0`
+- [ ] Review any `interface{}`/`any` fields — they now produce empty schemas instead of `{"type":"object"}`
+- [ ] Review fields with both `omitempty` and `validate:"required"` — `omitempty` now takes precedence
+- [ ] Verify embedded struct schemas are promoted correctly
+- [ ] Check that example values in your spec now have correct types (integers, floats, booleans)
+- [ ] Run your test suite to confirm no regressions
+
+---
+
 ## Migrating from v0.x to v1.0
 
 ### Config Structure

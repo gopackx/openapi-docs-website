@@ -76,6 +76,14 @@ docs := openswag.New(openswag.Config{
 })
 ```
 
+### What's the latest version?
+
+The latest version is **v1.1.0**. It includes 12 bug fixes across schema generation, example handling, and parameter parsing. All changes are backwards-compatible. See the [Migration Guide](/docs/guides/migration) for details.
+
+```bash
+go get github.com/gopackx/open-swag-go@v1.1.0
+```
+
 ## Usage
 
 ### How do I add an endpoint?
@@ -122,3 +130,19 @@ Only endpoints you explicitly register with `docs.AddEndpoint()` appear in the s
 ### Can I generate TypeScript types from my spec?
 
 Yes. Export your spec to a file and use tools like `openapi-typescript`, `openapi-fetch`, or `orval`. See the [TypeScript Types guide](/docs/guides/typescript-types) for details.
+
+### Why are my example values showing as strings in the spec?
+
+If you're on v1.0.x, example tag values were always stored as strings regardless of the field type. Upgrade to v1.1.0 where `example:"42"` on an `int64` field correctly produces the integer `42` in the spec.
+
+### Why are embedded struct fields missing from my schema?
+
+Embedded (anonymous) struct fields are supported in v1.1.0+. If you're on v1.0.x, embedded fields are silently ignored. Upgrade to v1.1.0 to get automatic field promotion.
+
+### How are `map` types represented in the schema?
+
+In v1.1.0+, `map[string]T` generates `{"type":"object","additionalProperties":{...}}` where the value schema describes `T`. In v1.0.x, map types were not correctly handled.
+
+### How are `interface{}`/`any` fields represented?
+
+In v1.1.0+, `interface{}` and `any` fields produce an empty schema `{}` (accepts any JSON value). In v1.0.x, they incorrectly produced `{"type":"object"}`.
