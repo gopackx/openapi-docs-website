@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__pencil__batch_get",
+      "Bash(bun run *)",
+      "Bash(echo \"Started, pid=$!\")",
+      "mcp__pencil__get_editor_state",
+      "mcp__pencil__get_screenshot",
+      "Bash(curl -s http://localhost:3001/)"
+    ]
+  }
+}

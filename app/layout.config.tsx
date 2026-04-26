@@ -4,23 +4,32 @@ export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
       title: (
-        <>
+        <span className="inline-flex items-center gap-2">
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="size-5"
+            viewBox="0 0 100 100"
+            className="size-5 shrink-0"
           >
-            <path d="M12 2L2 7l10 5 10-5-10-5z" />
-            <path d="M2 17l10 5 10-5" />
-            <path d="M2 12l10 5 10-5" />
+            <path
+              d="M 50 18 A 32 32 0 1 1 18 50"
+              stroke="#F97316"
+              strokeWidth={6}
+              fill="none"
+              strokeLinecap="round"
+              opacity={0.35}
+            />
+            <path
+              d="M 50 30 A 20 20 0 1 1 30 50"
+              stroke="#F97316"
+              strokeWidth={8}
+              fill="none"
+              strokeLinecap="round"
+              opacity={0.7}
+            />
+            <circle cx={50} cy={50} r={14} fill="#F97316" />
           </svg>
-          <span className="font-semibold">OPEN SWAG GO</span>
-        </>
+          <span className="font-semibold whitespace-nowrap">OPEN SWAG GO</span>
+        </span>
       ),
       url: '/',
     },

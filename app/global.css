@@ -4,3 +4,610 @@
 @source '../node_modules/fumadocs-ui/dist/**/*.js';
 
 @config '../tailwind.config.ts';
+
+/* Landing-page section backgrounds — match the .pen design exactly:
+   light mode alternates white / #F9FAFB; dark mode alternates #0A0E1A / #0F1629. */
+:root {
+  --landing-bg: #ffffff;
+  --landing-strip: #f9fafb;
+  --landing-strip-border: #e5e7eb;
+  --brand-pill-bg: #fff7ed;
+  --brand-pill-border: rgba(249, 115, 22, 0.20);
+  --brand-pill-text: #ea580c;
+  --brand-cta-fg: #ffffff;
+  --brand-cta-secondary-bg: #ffffff;
+  --brand-cta-secondary-border: #e5e7eb;
+}
+
+.dark {
+  --landing-bg: #0a0e1a;
+  --landing-strip: #0f1629;
+  --landing-strip-border: #1e293b;
+  --brand-pill-bg: rgba(255, 152, 0, 0.125);
+  --brand-pill-border: rgba(255, 152, 0, 0.25);
+  --brand-pill-text: #ff9800;
+  --brand-cta-fg: #0a0e1a;
+  --brand-cta-secondary-bg: transparent;
+  --brand-cta-secondary-border: #1e293b;
+}
+
+/* Code block tokens — light mode renders dark VS-Code-like terminals,
+   dark mode renders light GitHub-like terminals (per design). */
+:root {
+  --code-bg: #1e293b;
+  --code-bar: #0f172a;
+  --code-bar-fg: #94a3b8;
+  --code-status: #0f172a;
+  --code-status-border: #1e293b;
+  --code-fg: #e2e8f0;
+  --code-fg-soft: #cbd5e1;
+  --code-comment: #6b7280;
+  --code-comment-soft: #475569;
+  --code-keyword: #569cd6;
+  --code-fn: #dcdcaa;
+  --code-ident: #9cdcfe;
+  --code-type: #4ec9b0;
+  --code-str: #ce9178;
+  --code-num: #4fc1ff;
+  --code-tag: #f97316;
+  --code-success: #22c55e;
+  --code-border: rgba(249, 115, 22, 0.2);
+  --code-divider: #1f2630;
+  --code-inset: #0a0e13;
+  --code-inset-border: #1f2630;
+  --hero-code-bg: #0f172a;
+  --hero-code-bar: #1e293b;
+  --hero-code-bar-border: #334155;
+  --hero-code-fg: #e6edf3;
+  --hero-code-comment: #8b949e;
+  --hero-code-keyword: #ff7b72;
+  --hero-code-ident: #79c0ff;
+  --hero-code-type: #ffa657;
+  --hero-code-str: #a5d6ff;
+}
+
+/* Landing page responsive grids — explicit CSS so we don't depend on
+   Tailwind picking up arbitrary utilities from this directory. */
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 60px;
+  align-items: center;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+@media (min-width: 1024px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+.landing-features {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+}
+
+@media (min-width: 768px) {
+  .landing-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .landing-features {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.landing-demo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: center;
+}
+
+@media (min-width: 1024px) {
+  .landing-demo {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+}
+
+.landing-demo-spacer {
+  display: none;
+}
+
+/* === Docs route theme overrides ===
+   Apply the .pen "Open-Swaggo Docs — Desktop Light/Dark" palette by
+   overriding fumadocs' CSS variables only inside the docs route.
+   The fumadocs sidebar/toc/navbar still render normally; they just
+   pick up these colors instead of the defaults. */
+.docs-route {
+  --color-fd-background: #fafafa;
+  --color-fd-foreground: #0a0a0a;
+  --color-fd-muted: #f4f4f5;
+  --color-fd-muted-foreground: #52525b;
+  --color-fd-card: #ffffff;
+  --color-fd-card-foreground: #0a0a0a;
+  --color-fd-popover: #ffffff;
+  --color-fd-popover-foreground: #0a0a0a;
+  --color-fd-border: #e4e4e7;
+  --color-fd-ring: #f97316;
+  --color-fd-primary: #f97316;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: #f4f4f5;
+  --color-fd-secondary-foreground: #0a0a0a;
+  --color-fd-accent: rgba(249, 115, 22, 0.08);
+  --color-fd-accent-foreground: #f97316;
+}
+
+.dark .docs-route {
+  --color-fd-background: #0a0e1a;
+  --color-fd-foreground: #fafafa;
+  --color-fd-muted: rgba(255, 255, 255, 0.04);
+  --color-fd-muted-foreground: #a1a1aa;
+  --color-fd-card: #14141a;
+  --color-fd-card-foreground: #fafafa;
+  --color-fd-popover: #14141a;
+  --color-fd-popover-foreground: #fafafa;
+  --color-fd-border: rgba(255, 255, 255, 0.12);
+  --color-fd-ring: #f97316;
+  --color-fd-primary: #f97316;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-secondary: rgba(255, 255, 255, 0.06);
+  --color-fd-secondary-foreground: #fafafa;
+  --color-fd-accent: rgba(249, 115, 22, 0.10);
+  --color-fd-accent-foreground: #f97316;
+}
+
+/* Sidebar surface tint — design has the sidebar slightly different
+   from the body (white on near-white in light, near-black on black
+   in dark). Fumadocs uses --color-fd-card for the sidebar fill. */
+.docs-route [data-collection="sidebar"],
+.docs-route nav[id="nd-sidebar"],
+.docs-route aside[id="nd-toc"] {
+  background: var(--color-fd-card);
+}
+
+/* Sidebar section heading — uppercase tracking-wide muted gray. */
+.docs-route nav[id="nd-sidebar"] h3,
+.docs-route nav[id="nd-sidebar"] [data-radix-collection-item] > span {
+  letter-spacing: 0.08em;
+}
+
+/* TOC heading "ON THIS PAGE" matches design: 11px, muted, uppercase. */
+.docs-route aside[id="nd-toc"] h3 {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-fd-muted-foreground);
+  font-weight: 700;
+}
+
+/* Active sidebar/TOC items pick up --color-fd-primary (orange) and a
+   light orange tint via --color-fd-accent — both already remapped above. */
+
+/* === Docs code block chrome ===
+   Per .pen "Quick Install" code-block (k4ttq): plum panel, header
+   strip with traffic-light dots, divider, status footer.
+
+   Theme rule: when the page background is light, code blocks render
+   DARK (plum). When the page background is dark, code blocks INVERT
+   to LIGHT (white/GitHub-light) so they stand out from the dark
+   surface. Both chrome colors and Shiki syntax theme follow this
+   inversion. */
+.docs-route {
+  --docs-code-bg: #1e1e2e;
+  --docs-code-bar: #16162a;
+  --docs-code-border: #2e2e3e;
+  --docs-code-fg: #e2e8f0;
+  --docs-code-bar-fg: #94a3b8;
+  --docs-code-title-fg: #cbd5e1;
+  --docs-code-status-fg: #6b7280;
+  --docs-code-kw: #a6e22e;
+}
+.dark .docs-route {
+  --docs-code-bg: #ffffff;
+  --docs-code-bar: #f1f5f9;
+  --docs-code-border: #e2e8f0;
+  --docs-code-fg: #1f2328;
+  --docs-code-bar-fg: #57606a;
+  --docs-code-title-fg: #1f2328;
+  --docs-code-status-fg: #57606a;
+  --docs-code-kw: #1a7f37;
+}
+
+.docs-route figure.shiki {
+  background: var(--docs-code-bg) !important;
+  border: 1px solid var(--docs-code-border) !important;
+  border-radius: 10px !important;
+  color: var(--docs-code-fg);
+}
+
+/* Shiki dual-theme inversion.
+   Each token <span> has inline `style="--shiki-light:#X;--shiki-dark:#Y"`.
+   Overriding the variables at figure level doesn't work because span
+   inline styles win the cascade. Instead we override the COLOR property
+   at span level directly:
+   - Light page → tokens render with --shiki-dark (the dark theme color
+     designed for dark backgrounds), readable on plum panel.
+   - Dark page → tokens render with --shiki-light (the light theme color
+     designed for light backgrounds), readable on white panel. */
+html:not(.dark) .docs-route figure.shiki span {
+  color: var(--shiki-dark) !important;
+}
+.dark .docs-route figure.shiki span {
+  color: var(--shiki-light) !important;
+}
+
+/* Status bar — appended after the code body. */
+.docs-route figure.shiki::after {
+  content: 'UTF-8 · LF · code';
+  display: block;
+  background: var(--docs-code-bar);
+  color: var(--docs-code-status-fg);
+  border-top: 1px solid var(--docs-code-border);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "JetBrains Mono", monospace;
+  font-size: 11px;
+  font-weight: 400;
+  padding: 6px 14px;
+  text-align: right;
+  letter-spacing: 0.02em;
+}
+
+/* CASE A — Code block WITH filename: fumadocs renders a real title
+   row containing a <figcaption>. */
+.docs-route figure.shiki > div:has(> figcaption) {
+  background: var(--docs-code-bar) !important;
+  color: var(--docs-code-bar-fg) !important;
+  border-bottom-color: var(--docs-code-border) !important;
+  position: relative;
+  padding-left: 14px !important;
+  gap: 12px !important;
+}
+.docs-route figure.shiki > div:has(> figcaption)::before {
+  content: '';
+  flex-shrink: 0;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #ff5f57;
+  box-shadow: 16px 0 0 0 #febc2e, 32px 0 0 0 #28c840;
+  margin-right: 30px;
+}
+.docs-route figure.shiki > div:has(> figcaption) figcaption {
+  color: var(--docs-code-title-fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "JetBrains Mono", monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+.docs-route figure.shiki > div:has(> figcaption) button {
+  color: var(--docs-code-bar-fg);
+}
+.docs-route figure.shiki > div:has(> figcaption) button:hover {
+  color: #f97316;
+}
+
+/* CASE B — Code block WITHOUT filename: synthetic title strip. */
+.docs-route figure.shiki:not(:has(figcaption)) {
+  padding-top: 36px;
+  position: relative;
+}
+.docs-route figure.shiki:not(:has(figcaption))::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background:
+    radial-gradient(circle 5px at 14px 50%, #ff5f57 99%, transparent 100%),
+    radial-gradient(circle 5px at 30px 50%, #febc2e 99%, transparent 100%),
+    radial-gradient(circle 5px at 46px 50%, #28c840 99%, transparent 100%),
+    var(--docs-code-bar);
+  border-bottom: 1px solid var(--docs-code-border);
+  z-index: 1;
+}
+.docs-route figure.shiki:not(:has(figcaption)) > div:first-child {
+  z-index: 2;
+}
+
+/* Pre / code area — flush inside figure, transparent so the figure
+   bg shows. Plain text (no Shiki span) falls back to --docs-code-fg.
+   Per .pen design, code blocks use JetBrains Mono. */
+.docs-route figure.shiki pre,
+.docs-route figure.shiki code {
+  background: transparent !important;
+  color: var(--docs-code-fg) !important;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+}
+.docs-route figure.shiki pre {
+  margin: 0;
+  padding: 16px 18px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* Standalone <pre> blocks (no figure wrapper) — apply the same chrome. */
+.docs-route pre:not(figure.shiki *) {
+  background: var(--docs-code-bg) !important;
+  color: var(--docs-code-fg) !important;
+  border: 1px solid var(--docs-code-border) !important;
+  border-radius: 10px !important;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "JetBrains Mono", monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* Highlighted line markers — subtle orange-tinted bar that matches
+   the brand. */
+.docs-route figure.shiki [data-highlighted-line] {
+  background: rgba(249, 115, 22, 0.12);
+  border-left: 2px solid #f97316;
+}
+
+/* Inline code (backticks in paragraphs) — adaptive surface chip. */
+.docs-route :not(pre) > code {
+  background: var(--color-fd-secondary);
+  color: var(--color-fd-foreground);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--color-fd-border);
+  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "JetBrains Mono", monospace;
+}
+
+/* Feature card hover — lift + brand-orange tinted shadow + brighter ring */
+.feature-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(249, 115, 22, 0.45) !important;
+  box-shadow:
+    0 12px 24px -8px rgba(249, 115, 22, 0.30),
+    0 24px 48px -12px rgba(249, 115, 22, 0.18) !important;
+}
+.feature-card:focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 3px;
+}
+
+@media (min-width: 1024px) {
+  .landing-demo-spacer {
+    display: block;
+  }
+}
+
+/* === Mobile landing overrides (≤767px) ===
+   Per .pen frames "Open-Swaggo Landing — Mobile Light" (UtMf1) and
+   "Mobile Dark" (2TEDd): the hero becomes full-bleed brand orange in
+   both themes, CTAs go vertical-full-width, stats simplify to value
+   over label without icons or separators, sections shrink to 48/24
+   padding, and the hero terminal stays light-themed regardless of
+   page theme. Desktop is untouched. */
+@media (max-width: 767px) {
+  /* Hero — full bleed orange, white text, light terminal */
+  .landing-hero-section {
+    background: #ff6b35 !important;
+    padding: 48px 24px 56px !important;
+    --hero-code-bg: #ffffff;
+    --hero-code-bar: #f1f5f9;
+    --hero-code-bar-border: #e2e8f0;
+    --hero-code-fg: #1f2328;
+    --hero-code-comment: #6e7781;
+    --hero-code-keyword: #cf222e;
+    --hero-code-ident: #0550ae;
+    --hero-code-type: #953800;
+    --hero-code-str: #0a3069;
+  }
+  .landing-hero { gap: 24px !important; }
+  .landing-hero .hero-text {
+    align-items: center !important;
+    text-align: center;
+    gap: 20px !important;
+  }
+  .hero-pill {
+    align-self: center !important;
+    background: rgba(255, 255, 255, 0.13) !important;
+    border-color: transparent !important;
+  }
+  .hero-pill-text { color: #ffffff !important; }
+  .hero-pill-dot { background: #ffffff !important; }
+  .hero-headline {
+    color: #ffffff !important;
+    font-size: 2.125rem !important;
+    line-height: 1.1 !important;
+  }
+  .hero-subhead {
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-size: 14px !important;
+    line-height: 1.5 !important;
+    max-width: none !important;
+  }
+  .hero-cta-row {
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+    gap: 12px !important;
+  }
+  .hero-cta-primary,
+  .hero-cta-secondary {
+    width: 100% !important;
+    height: 48px;
+    justify-content: center !important;
+    padding: 0 16px !important;
+    border-radius: 9999px !important;
+    box-shadow: none !important;
+  }
+  .hero-cta-primary {
+    background: #ffffff !important;
+    color: #ff6b35 !important;
+  }
+  .hero-cta-primary svg { stroke: #ff6b35 !important; }
+  .hero-cta-secondary {
+    background: rgba(255, 255, 255, 0.10) !important;
+    color: #ffffff !important;
+    border: 1.5px solid rgba(255, 255, 255, 0.33) !important;
+  }
+  .hero-cta-secondary svg { stroke: #ffffff !important; }
+
+  /* Trust strip — stat value over label, no icons, no separators */
+  .landing-trust-strip { padding: 20px 16px !important; }
+  .landing-trust-strip-inner {
+    gap: 8px !important;
+    justify-content: space-around !important;
+  }
+  .stat-block { gap: 0 !important; }
+  .stat-icon { display: none !important; }
+  .stat-sep { display: none !important; }
+  .stat-inner {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 2px !important;
+  }
+  .stat-value {
+    color: #ff6b35 !important;
+    font-size: 22px !important;
+    font-weight: 700 !important;
+  }
+  .stat-label { font-size: 11px !important; }
+
+  /* Section paddings shrink */
+  .landing-features-section,
+  .landing-demo-section,
+  .landing-hiw-section,
+  .landing-install-section,
+  .landing-faq-section {
+    padding: 48px 24px !important;
+  }
+  .landing-frameworks-section { padding: 48px 24px !important; }
+  .landing-footer { padding: 40px 24px 32px !important; }
+
+  /* Smaller section titles on mobile */
+  .landing-section-title {
+    font-size: 1.625rem !important;
+    line-height: 1.15 !important;
+  }
+
+  /* Hero terminal — shrink font and wrap long lines to avoid horizontal
+     scroll on narrow viewports. Newlines inside the source are still
+     preserved by pre-wrap; only over-length lines wrap. */
+  .hero-terminal-body {
+    font-size: 11px !important;
+    line-height: 1.6 !important;
+    padding: 14px 16px !important;
+    overflow-x: hidden !important;
+    white-space: pre-wrap !important;
+    word-break: break-word;
+  }
+  .hero-terminal-bar {
+    padding: 10px 14px !important;
+  }
+
+  /* Hide INPUT/OUTPUT label row on mobile — panels stack and the
+     labels become redundant decoration. */
+  .landing-demo-labels {
+    display: none !important;
+  }
+
+  /* Live demo handler.go panel — wrap long lines so there's no
+     horizontal scroll on narrow viewports. */
+  .demo-panel-body {
+    font-size: 10.5px !important;
+    line-height: 1.6 !important;
+    padding: 14px 16px !important;
+    overflow-x: hidden !important;
+    white-space: pre-wrap !important;
+    word-break: break-word;
+  }
+
+  /* Compile arrow points DOWN on mobile (panels stack vertically). */
+  .demo-arrow {
+    transform: rotate(90deg);
+  }
+
+  /* Hide "How it works" section on mobile per design preference. */
+  .landing-hiw-section {
+    display: none !important;
+  }
+
+  /* Quick install terminal — wrap long install command on narrow
+     viewports so there's no horizontal scroll. */
+  .install-terminal-body {
+    font-size: 11px !important;
+    line-height: 1.6 !important;
+    padding: 14px 16px !important;
+    overflow-x: hidden !important;
+    white-space: pre-wrap !important;
+    word-break: break-all;
+  }
+
+  /* Docs MDX code blocks (fumadocs figure.shiki) — wrap long lines on
+     narrow viewports so there's no horizontal scroll. */
+  .docs-route figure.shiki pre,
+  .docs-route figure.shiki pre code {
+    font-size: 11px !important;
+    line-height: 1.6 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word;
+  }
+  .docs-route figure.shiki pre {
+    padding: 12px 14px !important;
+    overflow-x: hidden !important;
+  }
+  /* Tighter title bar + status footer to match smaller viewport. */
+  .docs-route figure.shiki > div:has(> figcaption) {
+    padding: 8px 12px !important;
+    height: auto !important;
+  }
+  .docs-route figure.shiki::after {
+    padding: 5px 12px !important;
+    font-size: 10px !important;
+  }
+
+  /* Docs home custom Quick Install code block — drop the line-numbers
+     gutter on narrow screens and let lines wrap. */
+  .docs-home pre {
+    font-size: 11px !important;
+    line-height: 1.6 !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
+    padding: 12px 14px !important;
+    overflow-x: hidden !important;
+  }
+}
+
+.dark {
+  --code-bg: #ffffff;
+  --code-bar: #f1f5f9;
+  --code-bar-fg: #57606a;
+  --code-status: #f8fafc;
+  --code-status-border: #e2e8f0;
+  --code-fg: #1f2328;
+  --code-fg-soft: #1f2328;
+  --code-comment: #6e7781;
+  --code-comment-soft: #6e7781;
+  --code-keyword: #cf222e;
+  --code-fn: #8250df;
+  --code-ident: #0550ae;
+  --code-type: #953800;
+  --code-str: #0a3069;
+  --code-num: #0550ae;
+  --code-tag: #f97316;
+  --code-success: #1a7f37;
+  --code-border: #e2e8f0;
+  --code-divider: #e2e8f0;
+  --code-inset: #f8fafc;
+  --code-inset-border: #e2e8f0;
+  --hero-code-bg: #ffffff;
+  --hero-code-bar: #f1f5f9;
+  --hero-code-bar-border: #e2e8f0;
+  --hero-code-fg: #1f2328;
+  --hero-code-comment: #6e7781;
+  --hero-code-keyword: #cf222e;
+  --hero-code-ident: #0550ae;
+  --hero-code-type: #953800;
+  --hero-code-str: #0a3069;
+}

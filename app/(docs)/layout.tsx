@@ -5,8 +5,10 @@ import type { ReactNode } from 'react';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <DocsLayout {...baseOptions()} tree={source.pageTree}>
-      {children}
-    </DocsLayout>
+    <div className="docs-route">
+      <DocsLayout {...baseOptions()} tree={source.pageTree}>
+        {children}
+      </DocsLayout>
+    </div>
   );
 }
