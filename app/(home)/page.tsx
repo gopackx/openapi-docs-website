@@ -77,24 +77,32 @@ const features = [
 const steps = [
   {
     n: '1',
-    title: 'Annotate',
-    description: 'Add standard Go comments above your handlers with open-swaggo tags.',
+    title: 'Define',
+    description:
+      'Build openswag.Endpoint values from your Go request and response structs — no annotations, no codegen.',
   },
   {
     n: '2',
-    title: 'Generate',
-    description: 'Run open-swaggo gen ./... and watch your spec file appear in seconds.',
+    title: 'Mount',
+    description:
+      'Attach the docs handler to your router with one call — Gin, Echo, Fiber, Chi, or net/http.',
   },
   {
     n: '3',
-    title: 'Ship',
-    description: 'Serve your spec with Swagger UI, ReDoc, or feed it into your CI pipeline.',
+    title: 'Serve',
+    description:
+      'Start your app — Scalar UI and the live OpenAPI JSON are served straight from /docs.',
   },
 ];
 
 const stats = [
   { icon: 'star', value: '4', label: 'GitHub Stars' },
-  { icon: 'tag', value: 'v1.1.0', label: 'Latest Release' },
+  {
+    icon: 'tag',
+    value: 'v1.1.1',
+    label: 'Latest Release',
+    href: 'https://github.com/gopackx/open-swag-go/releases/tag/v1.1.1',
+  },
   { icon: 'scale', value: 'MIT', label: 'License' },
   { icon: 'gitFork', value: '0', label: 'Forks' },
 ] as const;
@@ -104,7 +112,7 @@ const frameworks = ['Gin', 'Echo', 'Fiber', 'Chi', 'net/http'];
 const faqs = [
   {
     q: 'How does open-swaggo differ from swaggo/swag?',
-    a: "open-swaggo supports OpenAPI 3.x natively, has pluggable framework adapters, and generates specs at build time with zero runtime overhead. It's a modern rethink built for today's Go ecosystem.",
+    a: "open-swaggo supports OpenAPI 3.x natively and ships pluggable framework adapters. Endpoints are described with plain Go values and struct tags — no comment-based annotations, no codegen step, no generated YAML in your repo. The spec is built at runtime via reflection.",
   },
   {
     q: 'Which Go frameworks are supported?',
@@ -112,7 +120,7 @@ const faqs = [
   },
   {
     q: 'Can I use it in my CI/CD pipeline?',
-    a: 'Absolutely. open-swaggo is a single binary with no dependencies. Add open-swaggo gen ./... to your build step and validate specs on every push.',
+    a: 'Yes. The spec is exposed as JSON at /docs/openapi.json, so a test can boot your app, fetch that endpoint, and snapshot or diff it against a checked-in golden file to catch breaking changes on every push.',
   },
   {
     q: 'Is it production-ready?',
@@ -394,70 +402,231 @@ function HeroTerminal() {
   );
 }
 
-function InstallTerminal() {
+const Cm = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ color: 'var(--code-comment)' }}>{children}</span>
+);
+const Kw = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ color: 'var(--code-keyword)' }}>{children}</span>
+);
+const Str = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ color: 'var(--code-str)' }}>{children}</span>
+);
+const Ty = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ color: 'var(--code-type)' }}>{children}</span>
+);
+const Fnc = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ color: 'var(--code-fn)' }}>{children}</span>
+);
+const Id = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ color: 'var(--code-ident)' }}>{children}</span>
+);
+const Suc = ({ children }: { children: React.ReactNode }) => (
+  <span style={{ color: 'var(--code-success)' }}>{children}</span>
+);
+
+function InstallStepCard({
+  num,
+  title,
+  caption,
+  fileLabel,
+  children,
+}: {
+  num: string;
+  title: string;
+  caption: string;
+  fileLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <span
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: '9999px',
+            background: ORANGE,
+            color: '#fff',
+            fontFamily: MONO,
+            fontSize: 13,
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {num}
+        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <span
+            style={{
+              color: 'var(--color-fd-foreground)',
+              fontSize: 16,
+              fontWeight: 700,
+              lineHeight: 1.3,
+            }}
+          >
+            {title}
+          </span>
+          <span
+            style={{
+              color: 'var(--color-fd-muted-foreground)',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {caption}
+          </span>
+        </div>
+      </div>
+      <div
+        style={{
+          borderRadius: '12px',
+          overflow: 'hidden',
+          border: '1px solid var(--code-border)',
+          background: 'var(--code-bg)',
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '12px 16px',
+            background: 'var(--code-bar)',
+          }}
+        >
+          <span style={{ width: 12, height: 12, borderRadius: '9999px', background: '#ef4444' }} />
+          <span style={{ width: 12, height: 12, borderRadius: '9999px', background: '#eab308' }} />
+          <span style={{ width: 12, height: 12, borderRadius: '9999px', background: '#22c55e' }} />
+          <span style={{ marginLeft: '8px', color: 'var(--code-bar-fg)', fontFamily: MONO, fontSize: 12 }}>
+            {fileLabel}
+          </span>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function InstallSteps() {
+  const preStyle: React.CSSProperties = {
+    margin: 0,
+    padding: '20px',
+    fontFamily: MONO,
+    fontSize: 13,
+    lineHeight: 1.7,
+    color: 'var(--code-fg)',
+    overflow: 'auto',
+  };
   return (
     <div
       style={{
         width: '100%',
-        maxWidth: '720px',
+        maxWidth: '820px',
         margin: '0 auto',
-        borderRadius: '12px',
-        overflow: 'hidden',
-        border: '1px solid var(--code-border)',
-        background: 'var(--code-bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '24px',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '12px 16px',
-          background: 'var(--code-bar)',
-        }}
+      <InstallStepCard
+        num="1"
+        title="Install the library"
+        caption="open-swag-go is a library — use go get, not go install."
+        fileLabel="terminal"
       >
-        <span style={{ width: 12, height: 12, borderRadius: '9999px', background: '#ef4444' }} />
-        <span style={{ width: 12, height: 12, borderRadius: '9999px', background: '#eab308' }} />
-        <span style={{ width: 12, height: 12, borderRadius: '9999px', background: '#22c55e' }} />
-        <span style={{ marginLeft: '8px', color: 'var(--code-bar-fg)', fontFamily: MONO, fontSize: 12 }}>
-          terminal
-        </span>
-      </div>
-      <pre
-        className="install-terminal-body"
-        style={{
-          margin: 0,
-          padding: '20px',
-          fontFamily: MONO,
-          fontSize: 13,
-          lineHeight: 1.7,
-          color: 'var(--code-fg)',
-          overflow: 'auto',
-        }}
+        <pre className="install-terminal-body" style={preStyle}>
+          <Cm>{`# Add open-swag-go to your module
+`}</Cm>
+          <span>{`$ go get github.com/gopackx/open-swag-go@latest`}</span>
+        </pre>
+      </InstallStepCard>
+
+      <InstallStepCard
+        num="2"
+        title="Define your endpoints in code"
+        caption="Plain Go structs and openswag.Endpoint values — no annotations, no codegen."
+        fileLabel="main.go"
       >
-        <span style={{ color: 'var(--code-comment)' }}>{`# Install open-swaggo
+        <pre className="install-terminal-body" style={preStyle}>
+          <Kw>package</Kw>{` main
+
+`}
+          <Kw>import</Kw>{` (
+    `}<Str>&quot;net/http&quot;</Str>{`
+
+    openswag `}<Str>&quot;github.com/gopackx/open-swag-go&quot;</Str>{`
+)
+
+`}
+          <Kw>type</Kw>{` `}<Ty>CreateUserRequest</Ty>{` `}<Kw>struct</Kw>{` {
+    `}<Id>Name</Id>{`  `}<Kw>string</Kw>{` `}<Str>{'`json:"name"  example:"John Doe"`'}</Str>{`
+    `}<Id>Email</Id>{` `}<Kw>string</Kw>{` `}<Str>{'`json:"email" example:"john@example.com"`'}</Str>{`
+}
+
+`}
+          <Kw>type</Kw>{` `}<Ty>UserResponse</Ty>{` `}<Kw>struct</Kw>{` {
+    `}<Id>ID</Id>{`    `}<Kw>string</Kw>{` `}<Str>{'`json:"id"`'}</Str>{`
+    `}<Id>Name</Id>{`  `}<Kw>string</Kw>{` `}<Str>{'`json:"name"`'}</Str>{`
+    `}<Id>Email</Id>{` `}<Kw>string</Kw>{` `}<Str>{'`json:"email"`'}</Str>{`
+}
+
+`}
+          <Kw>func</Kw>{` `}<Fnc>main</Fnc>{`() {
+    docs := openswag.`}<Fnc>New</Fnc>{`(openswag.`}<Ty>Config</Ty>{`{
+        `}<Id>Info</Id>{`: openswag.`}<Ty>Info</Ty>{`{
+            `}<Id>Title</Id>{`:   `}<Str>&quot;My API&quot;</Str>{`,
+            `}<Id>Version</Id>{`: `}<Str>&quot;1.0.0&quot;</Str>{`,
+        },
+    })
+
+    docs.`}<Fnc>Add</Fnc>{`(openswag.`}<Ty>Endpoint</Ty>{`{
+        `}<Id>Method</Id>{`:  `}<Str>&quot;POST&quot;</Str>{`,
+        `}<Id>Path</Id>{`:    `}<Str>&quot;/users&quot;</Str>{`,
+        `}<Id>Summary</Id>{`: `}<Str>&quot;Create a user&quot;</Str>{`,
+        `}<Id>Tags</Id>{`:    []`}<Kw>string</Kw>{`{`}<Str>&quot;Users&quot;</Str>{`},
+        `}<Id>RequestBody</Id>{`: &openswag.`}<Ty>RequestBody</Ty>{`{
+            `}<Id>Required</Id>{`: `}<Kw>true</Kw>{`,
+            `}<Id>Schema</Id>{`:   `}<Ty>CreateUserRequest</Ty>{`{},
+        },
+        `}<Id>Responses</Id>{`: `}<Kw>map</Kw>{`[`}<Kw>int</Kw>{`]openswag.`}<Ty>Response</Ty>{`{
+            201: {`}<Id>Description</Id>{`: `}<Str>&quot;Created&quot;</Str>{`, `}<Id>Schema</Id>{`: `}<Ty>UserResponse</Ty>{`{}},
+        },
+    })
+
+    mux := http.`}<Fnc>NewServeMux</Fnc>{`()
+    docs.`}<Fnc>Mount</Fnc>{`(mux, `}<Str>&quot;/docs&quot;</Str>{`)
+
+    http.`}<Fnc>ListenAndServe</Fnc>{`(`}<Str>&quot;:8080&quot;</Str>{`, mux)
+}`}
+        </pre>
+      </InstallStepCard>
+
+      <InstallStepCard
+        num="3"
+        title="Run and view your docs"
+        caption="Scalar UI is rendered live from the in-memory spec — no files written, no build step."
+        fileLabel="terminal"
+      >
+        <pre className="install-terminal-body" style={preStyle}>
+          <span>{`$ go run main.go
+
 `}</span>
-        <span>{`$ go install github.com/gopackx/open-swag-go@latest
-`}</span>
-        <span>{`
-`}</span>
-        <span style={{ color: 'var(--code-comment)' }}>{`# Initialize your project
-`}</span>
-        <span>{`$ open-swaggo init
-`}</span>
-        <span>{`
-`}</span>
-        <span style={{ color: 'var(--code-comment)' }}>{`# Generate your spec
-`}</span>
-        <span>{`$ open-swaggo gen ./...
-`}</span>
-        <span>{`
-`}</span>
-        <span style={{ color: 'var(--code-success)' }}>{`✓ Generated openapi.yaml (23 endpoints, 0 errors)`}</span>
-      </pre>
+          <Cm>{`# Scalar UI, rendered from the live spec
+`}</Cm>
+          <Suc>{`→ http://localhost:8080/docs/
+`}</Suc>
+          <Cm>{`# Raw OpenAPI 3.x JSON
+`}</Cm>
+          <Suc>{`→ http://localhost:8080/docs/openapi.json`}</Suc>
+        </pre>
+      </InstallStepCard>
     </div>
   );
 }
+
 
 function DemoLeftPanel() {
   return (
@@ -771,8 +940,8 @@ function DemoRightPanel() {
           fontSize: 11,
         }}
       >
-        <span style={{ color: 'var(--code-bar-fg)' }}>YAML · 12 lines · UTF-8</span>
-        <span style={{ color: ORANGE }}>OpenAPI 3.0</span>
+        <span style={{ color: 'var(--code-bar-fg)' }}>openapi.json · live · UTF-8</span>
+        <span style={{ color: ORANGE }}>OpenAPI 3.x</span>
       </div>
     </div>
   );
@@ -875,8 +1044,8 @@ export default function HomePage() {
               }}
             >
               open-swaggo derives docs from your Go struct values and standard struct tags
-              (json, validate, example) at build time — zero runtime overhead, idiomatic Go,
-              every major framework supported.
+              (json, validate, example) at runtime via reflection — no codegen, no committed
+              spec files, every major framework supported.
             </p>
             <div className="hero-cta-row" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
               <Link
@@ -949,13 +1118,17 @@ export default function HomePage() {
             gap: '24px 48px',
           }}
         >
-          {stats.map((stat, i) => (
-            <div
-              key={stat.label}
-              className="stat-block"
-              style={{ display: 'flex', alignItems: 'center', gap: '24px' }}
-            >
-              <div className="stat-inner" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+          {stats.map((stat, i) => {
+            const href = 'href' in stat ? stat.href : undefined;
+            const innerStyle: React.CSSProperties = {
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              textDecoration: 'none',
+              color: 'inherit',
+            };
+            const inner = (
+              <>
                 <span className="stat-icon" style={{ display: 'inline-flex' }}>
                   <Icon name={stat.icon} size={18} color={ORANGE} />
                 </span>
@@ -965,12 +1138,35 @@ export default function HomePage() {
                 <span className="stat-label" style={{ color: 'var(--color-fd-muted-foreground)', fontSize: 14 }}>
                   {stat.label}
                 </span>
+              </>
+            );
+            return (
+              <div
+                key={stat.label}
+                className="stat-block"
+                style={{ display: 'flex', alignItems: 'center', gap: '24px' }}
+              >
+                {href ? (
+                  <a
+                    className="stat-inner"
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={innerStyle}
+                  >
+                    {inner}
+                  </a>
+                ) : (
+                  <div className="stat-inner" style={innerStyle}>
+                    {inner}
+                  </div>
+                )}
+                {i < stats.length - 1 && (
+                  <span className="stat-sep" style={{ color: 'var(--color-fd-muted-foreground)', opacity: 0.4 }}>·</span>
+                )}
               </div>
-              {i < stats.length - 1 && (
-                <span className="stat-sep" style={{ color: 'var(--color-fd-muted-foreground)', opacity: 0.4 }}>·</span>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
@@ -1110,7 +1306,7 @@ export default function HomePage() {
           <div className="landing-demo landing-demo-labels" style={{ marginBottom: '24px' }}>
             <DemoLabel num="01" eyebrow="INPUT" label="Go struct values & tags" />
             <span className="landing-demo-spacer" style={{ width: 48 }} aria-hidden />
-            <DemoLabel num="02" eyebrow="OUTPUT" label="OpenAPI 3.0 spec" />
+            <DemoLabel num="02" eyebrow="OUTPUT" label="Live OpenAPI 3.x spec" />
           </div>
 
           <div className="landing-demo" style={{ alignItems: 'stretch' }}>
@@ -1149,7 +1345,7 @@ export default function HomePage() {
                   fontWeight: 600,
                 }}
               >
-                compile
+                reflect
               </span>
             </div>
             <div style={{ display: 'flex' }}>
@@ -1265,8 +1461,19 @@ export default function HomePage() {
           >
             <SectionEyebrow>QUICK INSTALL</SectionEyebrow>
             <SectionTitle>Up and running in 30 seconds</SectionTitle>
+            <p
+              style={{
+                margin: 0,
+                color: 'var(--color-fd-muted-foreground)',
+                fontSize: 16,
+                maxWidth: 560,
+              }}
+            >
+              Three runtime steps. No CLI to install, no codegen, no generated spec files
+              checked into your repo.
+            </p>
           </div>
-          <InstallTerminal />
+          <InstallSteps />
         </div>
       </section>
 

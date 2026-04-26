@@ -3,12 +3,12 @@ title: Migration Guide
 description: Step-by-step guide for migrating between open-swag-go versions with before/after code comparisons.
 ---
 
-## Migrating from v1.0.x to v1.1.0
+## Migrating from v1.0.x to v1.1.1
 
-v1.1.0 is fully backwards-compatible — no public API signatures changed. All fixes are additive struct fields and behavior corrections. Update by running:
+v1.1.0 and v1.1.1 are both fully backwards-compatible — no public API signatures changed, and existing endpoint definitions continue to compile. v1.1.0 ships 12 schema-generation fixes; v1.1.1 makes example values opt-in for cleaner specs. Update by running:
 
 ```bash
-go get github.com/gopackx/open-swag-go@v1.1.0
+go get github.com/gopackx/open-swag-go@v1.1.1
 ```
 
 ### What Changed
@@ -55,15 +55,41 @@ type User struct {
 
 #### Server Configuration Fixes
 
-**Port conversion fix** — `CommonServers.Localhost()` and `LocalhostServer()` now correctly convert port numbers to strings (previously used invalid `string(rune(port))` conversion).
+**Port conversion fix** — `CommonServers.Localhost()` and `LocalhostServer()` now correctly convert port numbers to strings (previously used invalid `string(rune(port))` conversion). If you used `openswag.LocalhostServer(port)` or `CommonServers.Localhost(port)` on v1.0.0, the URL was silently broken — upgrading is strongly recommended.
+
+### What Changed in v1.1.1
+
+**Examples are now opt-in.** v1.1.0 auto-generated placeholder example values for every primitive field (`"string"`, `0`, `false`, …) even when no `example` tag was set. v1.1.1 removes that behavior — example values appear only where you set `example:"..."`. The result is a cleaner Scalar UI without placeholder noise.
+
+If your spec was relying on those placeholders to populate the rendered docs, add explicit `example:"..."` tags to the fields you want shown:
+
+```go
+// Before (v1.1.0 would auto-fill these in the spec)
+type CreateUserRequest struct {
+    Name  string `json:"name"`
+    Email string `json:"email"`
+}
+
+// After (v1.1.1 — be explicit about which examples you want)
+type CreateUserRequest struct {
+    Name  string `json:"name"  example:"Jane Doe"`
+    Email string `json:"email" example:"jane@example.com"`
+}
+```
+
+**`example:"null"` literal** — Setting `example:"null"` on any field type now produces a real JSON `null` in the spec (previously this only worked for slices and maps). Use it to document nullable fields.
+
+**Typed-nil example bug fixed** — Stray `"example": null` entries no longer leak into request body schemas when no example is provided.
 
 ### Migration Checklist
 
-- [ ] Run `go get github.com/gopackx/open-swag-go@v1.1.0`
-- [ ] Review any `interface{}`/`any` fields — they now produce empty schemas instead of `{"type":"object"}`
-- [ ] Review fields with both `omitempty` and `validate:"required"` — `omitempty` now takes precedence
-- [ ] Verify embedded struct schemas are promoted correctly
-- [ ] Check that example values in your spec now have correct types (integers, floats, booleans)
+- [ ] Run `go get github.com/gopackx/open-swag-go@v1.1.1`
+- [ ] Review any `interface{}`/`any` fields — they now produce empty schemas instead of `{"type":"object"}` (v1.1.0)
+- [ ] Review fields with both `omitempty` and `validate:"required"` — `omitempty` now takes precedence (v1.1.0)
+- [ ] Verify embedded struct schemas are promoted correctly (v1.1.0)
+- [ ] Check that example values in your spec now have correct types (integers, floats, booleans) (v1.1.0)
+- [ ] Add explicit `example:"..."` tags to any fields where you previously relied on auto-generated placeholders (v1.1.1)
+- [ ] If you used `openswag.LocalhostServer(port)` on v1.0.0, regenerate your spec — the URL output is now correct
 - [ ] Run your test suite to confirm no regressions
 
 ---

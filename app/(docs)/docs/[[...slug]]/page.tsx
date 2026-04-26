@@ -141,7 +141,7 @@ function Hero() {
         }}
       >
         <Meta icon="timer" label="3 min read" />
-        <Meta icon="tag" label="v1.1.0" />
+        <Meta icon="tag" label="v1.1.1" />
         <Meta icon="calendar" label="Updated Apr 2026" />
       </div>
     </section>

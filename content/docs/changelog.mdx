@@ -5,6 +5,30 @@ description: Release notes and version history for open-swag-go.
 
 # Changelog
 
+## v1.1.1
+
+Cleaner specs out of the box. Examples are now opt-in: you only see them where you ask for them, and `null` is supported as a first-class example value. Fully backwards-compatible — no API signatures changed.
+
+```bash
+go get github.com/gopackx/open-swag-go@v1.1.1
+```
+
+### Behavior change worth flagging
+
+- **Examples are now opt-in.** Auto-generated example values for primitive fields have been removed. Previously every primitive field got a placeholder (`"string"`, `0`, `false`, …) in the spec even without an `example` tag, which produced noisy Scalar UI. Now examples appear only where you set `example:"..."` on the field.
+
+### What's new
+
+- **`example:"null"` literal** — Setting `example:"null"` on any field type now produces actual JSON `null` in the spec (previously only worked for slices/maps). Useful for documenting nullable fields.
+
+### Fixed
+
+- Stray `"example": null` entries no longer leak into request body schemas when no example is provided (typed-nil interface bug).
+
+### Migrating from v1.1.0
+
+If you relied on the old auto-generated placeholders to populate the Scalar UI, add explicit `example:"..."` tags to the fields you want shown — see the [Migration Guide](/docs/guides/migration) for details.
+
 ## v1.1.0
 
 All 12 fixes are backwards-compatible — no public API signatures changed, only additive struct fields and behavior corrections.
