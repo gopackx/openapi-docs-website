@@ -30,20 +30,22 @@ func main() {
 	app := fiber.New()
 
 	docs := openswag.New(openswag.Config{
-		Title:   "My API",
-		Version: "1.0.0",
+		Info: openswag.Info{
+			Title:   "My API",
+			Version: "1.0.0",
+		},
 	})
 
 	docs.Add(openswag.Endpoint{
 		Method:  "GET",
 		Path:    "/health",
 		Summary: "Health check",
-		Responses: []openswag.Response{
-			{Status: 200, Description: "OK"},
+		Responses: map[int]openswag.Response{
+			200: {Description: "OK"},
 		},
 	})
 
-	swagfiber.Mount(app, "/docs", docs)
+	swagfiber.Mount(app, docs, "/docs")
 
 	app.Listen(":8080")
 }
@@ -57,7 +59,7 @@ func main() {
 api := app.Group("/api/v1")
 api.Use(authMiddleware)
 
-swagfiber.MountGroup(api, "/docs", docs)
+swagfiber.MountGroup(api, docs)
 // Docs served at /api/v1/docs
 ```
 

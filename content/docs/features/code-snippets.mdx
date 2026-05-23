@@ -1,82 +1,70 @@
 ---
 title: Code Snippets
-description: Auto-generate code snippets for curl, JavaScript, Go, Python, and PHP so API consumers can copy ready-to-use request examples.
+description: Generate ready-to-use code snippets for curl, JavaScript, Go, and Python from a request definition.
 ---
 
 # Code Snippets
 
-The snippets feature generates ready-to-use code examples for every endpoint in your docs. Visitors see a tabbed panel with curl, JavaScript, Go, Python, and PHP snippets they can copy and paste directly into their projects.
+The `pkg/tryit/snippets` package generates ready-to-use code examples for an HTTP request. Built-in generators cover **curl, JavaScript, Go, and Python**.
 
-## SnippetConfig
+```go
+import "github.com/gopackx/open-swag-go/pkg/tryit/snippets"
+```
 
-`SnippetConfig` controls snippet generation and is passed to the top-level `Config` via the `Console` field.
+## Manager
 
-```go title="snippet_config.go"
-type SnippetConfig struct {
-	Enabled   bool       // Enable code snippet generation
-	Languages []Language // Which languages to generate snippets for
-	Templates map[Language]string // Custom templates per language (optional)
+`NewManager` returns a manager pre-loaded with the four built-in generators.
+
+```go title="snippets_manager.go"
+mgr := snippets.NewManager() // registers curl, javascript, go, python
+
+snippet, ok := mgr.Generate("curl", snippets.Request{
+	Method:  "POST",
+	URL:     "https://api.example.com/users",
+	Headers: map[string]string{"Content-Type": "application/json"},
+	Body:    `{"name": "Alice", "email": "alice@example.com"}`,
+})
+```
+
+The `Request` type describes the call to render:
+
+```go
+type Request struct {
+	Method      string
+	URL         string
+	Headers     map[string]string
+	Body        string
+	QueryParams map[string]string
 }
 ```
 
-### Supported languages
+### Generating all languages
 
-The `Language` type defines the five built-in languages:
+```go title="generate_all.go"
+all := mgr.GenerateAll(snippets.Request{
+	Method: "GET",
+	URL:    "https://api.example.com/users",
+})
+// all["curl"], all["javascript"], all["go"], all["python"]
 
-```go title="languages.go"
-const (
-	LangCurl       Language = "curl"
-	LangJavaScript Language = "javascript"
-	LangGo         Language = "go"
-	LangPython     Language = "python"
-	LangPHP        Language = "php"
+languages := mgr.Languages() // ["curl", "javascript", "go", "python"]
+```
+
+## Choosing languages in the console
+
+Which snippet languages appear in the try-it console is controlled by the console configuration:
+
+```go title="console_languages.go"
+import "github.com/gopackx/open-swag-go/pkg/tryit"
+
+console := tryit.NewConsole(
+	tryit.WithLanguages("curl", "javascript", "python"),
 )
-```
-
-## Enabling Snippets
-
-### Minimal setup
-
-Enable snippets with all five languages using the defaults:
-
-```go title="basic_snippets.go"
-import (
-	openswag "github.com/gopackx/open-swag-go"
-	"github.com/gopackx/open-swag-go/pkg/tryit/snippets"
-)
-
-cfg := openswag.Config{
-	Title:   "My API",
-	Version: "1.0.0",
-	Console: tryit.ConsoleConfig{
-		Enabled: true,
-		Snippets: snippets.SnippetConfig{
-			Enabled: true,
-		},
-	},
-}
-```
-
-When `Languages` is empty, all five languages are included by default.
-
-### Selecting specific languages
-
-Show only the languages your audience needs:
-
-```go title="select_languages.go"
-snippetCfg := snippets.SnippetConfig{
-	Enabled: true,
-	Languages: []snippets.Language{
-		snippets.LangCurl,
-		snippets.LangJavaScript,
-		snippets.LangPython,
-	},
-}
 ```
 
 ## Example Output
 
-Given a `POST /users` endpoint with a JSON body, the snippet generator produces the following for each language:
+Given a `POST /users` endpoint with a JSON body, the generators produce:
 
 ### curl
 
@@ -138,114 +126,54 @@ response = requests.post(
 data = response.json()
 ```
 
-### PHP
+## Custom Generators
 
-```php title="php_output"
-$ch = curl_init("https://api.example.com/users");
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Content-Type: application/json",
-    "Authorization: Bearer <token>",
-]);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-    "name" => "Alice",
-    "email" => "alice@example.com",
-]));
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+Register your own generator by implementing the `Generator` interface:
 
-$response = curl_exec($ch);
-curl_close($ch);
-```
-
-## Custom Templates
-
-Override the default snippet template for any language. Templates use Go `text/template` syntax with access to the endpoint's method, URL, headers, and body.
-
-```go title="custom_templates.go"
-snippetCfg := snippets.SnippetConfig{
-	Enabled: true,
-	Templates: map[snippets.Language]string{
-		snippets.LangCurl: `curl -X {{.Method}} {{.URL}}{{range $k, $v := .Headers}} \
-  -H "{{$k}}: {{$v}}"{{end}}{{if .Body}} \
-  -d '{{.Body}}'{{end}}`,
-	},
+```go
+type Generator interface {
+	Generate(req Request) string
+	Language() string
+	DisplayName() string
 }
 ```
 
-### Template variables
+```go title="custom_generator.go"
+type RubyGenerator struct{}
 
-| Variable | Type | Description |
-|----------|------|-------------|
-| `.Method` | `string` | HTTP method (`GET`, `POST`, etc.) |
-| `.URL` | `string` | Full request URL including path |
-| `.Headers` | `map[string]string` | Request headers |
-| `.Body` | `string` | JSON-encoded request body (empty for GET) |
-| `.ContentType` | `string` | Content-Type header value |
+func (RubyGenerator) Language() string    { return "ruby" }
+func (RubyGenerator) DisplayName() string { return "Ruby" }
+func (RubyGenerator) Generate(req snippets.Request) string {
+	return "require 'net/http'\n# ..."
+}
+
+mgr := snippets.NewManager()
+mgr.Register(RubyGenerator{})
+```
 
 ## Full Example
-
-A complete setup with the try-it console, selected languages, and a custom curl template:
 
 ```go title="full_snippets.go"
 package main
 
 import (
-	openswag "github.com/gopackx/open-swag-go"
-	"github.com/gopackx/open-swag-go/pkg/tryit"
+	"fmt"
+
 	"github.com/gopackx/open-swag-go/pkg/tryit/snippets"
-	"github.com/gopackx/open-swag-go/adapters/nethttp"
-	"net/http"
 )
 
 func main() {
-	snippetCfg := snippets.SnippetConfig{
-		Enabled: true,
-		Languages: []snippets.Language{
-			snippets.LangCurl,
-			snippets.LangJavaScript,
-			snippets.LangGo,
-			snippets.LangPython,
-		},
+	mgr := snippets.NewManager()
+
+	req := snippets.Request{
+		Method:  "POST",
+		URL:     "https://api.example.com/users",
+		Headers: map[string]string{"Content-Type": "application/json"},
+		Body:    `{"name": "Alice"}`,
 	}
 
-	cfg := openswag.Config{
-		Title:   "My API",
-		Version: "1.0.0",
-		Console: tryit.ConsoleConfig{
-			Enabled:  true,
-			Snippets: snippetCfg,
-		},
+	for lang, code := range mgr.GenerateAll(req) {
+		fmt.Printf("=== %s ===\n%s\n\n", lang, code)
 	}
-
-	endpoints := []openswag.Endpoint{
-		{
-			Method:  "GET",
-			Path:    "/users",
-			Summary: "List users",
-			Tags:    []string{"Users"},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "User list", ContentType: "application/json"},
-			},
-		},
-		{
-			Method:  "POST",
-			Path:    "/users",
-			Summary: "Create user",
-			Tags:    []string{"Users"},
-			RequestBody: &openswag.RequestBody{
-				ContentType: "application/json",
-				Description: "User to create",
-			},
-			Responses: []openswag.Response{
-				{StatusCode: 201, Description: "Created user", ContentType: "application/json"},
-			},
-		},
-	}
-
-	docs := openswag.New(cfg, endpoints...)
-	mux := http.NewServeMux()
-	nethttp.Mount(mux, "/docs", docs)
-
-	http.ListenAndServe(":8080", mux)
 }
 ```

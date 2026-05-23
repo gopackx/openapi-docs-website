@@ -21,6 +21,13 @@ import (
 	openswag "github.com/gopackx/open-swag-go"
 )
 
+// Pet is the response model returned by the API.
+type Pet struct {
+	ID   int    `json:"id" example:"1"`
+	Name string `json:"name" example:"Buddy"`
+	Kind string `json:"kind" example:"dog"`
+}
+
 func main() {
 	// 1. Configure your API metadata
 	cfg := openswag.Config{
@@ -42,12 +49,8 @@ func main() {
 			Summary:     "List all pets",
 			Description: "Returns every pet in the store.",
 			Tags:        []string{"Pets"},
-			Responses: []openswag.Response{
-				{
-					StatusCode:  200,
-					Description: "A list of pets",
-					ContentType: "application/json",
-				},
+			Responses: map[int]openswag.Response{
+				200: {Description: "A list of pets", Schema: []Pet{}},
 			},
 		},
 		{
@@ -58,24 +61,21 @@ func main() {
 			Tags:        []string{"Pets"},
 			RequestBody: &openswag.RequestBody{
 				Description: "Pet object to create",
-				ContentType: "application/json",
 				Required:    true,
+				Schema:      Pet{},
 			},
-			Responses: []openswag.Response{
-				{
-					StatusCode:  201,
-					Description: "Pet created successfully",
-					ContentType: "application/json",
-				},
+			Responses: map[int]openswag.Response{
+				201: {Description: "Pet created successfully", Schema: Pet{}},
 			},
 		},
 	}
 
-	// 3. Create the docs instance and mount it
-	docs := openswag.New(cfg, endpoints...)
+	// 3. Create the docs instance, register endpoints, and mount it
+	docs := openswag.New(cfg)
+	docs.AddAll(endpoints...)
 
 	mux := http.NewServeMux()
-	openswag.Mount(mux, "/docs", docs)
+	docs.Mount(mux, "/docs")
 
 	fmt.Println("Docs available at http://localhost:8080/docs")
 	http.ListenAndServe(":8080", mux)
@@ -124,13 +124,14 @@ endpoints := []openswag.Endpoint{
 
 ### 3. Mount and serve
 
-`openswag.New` creates a docs handler from your config and endpoints. `openswag.Mount` attaches it to any `net/http` mux at the path you choose.
+`openswag.New` creates a `*Docs` instance from your config. Register endpoints with `docs.AddAll(...)` (or `docs.Add(...)` one at a time), then call the `docs.Mount` method to attach the docs UI to any `net/http` mux at the path you choose.
 
 ```go
-docs := openswag.New(cfg, endpoints...)
+docs := openswag.New(cfg)
+docs.AddAll(endpoints...)
 
 mux := http.NewServeMux()
-openswag.Mount(mux, "/docs", docs)
+docs.Mount(mux, "/docs")
 
 http.ListenAndServe(":8080", mux)
 ```

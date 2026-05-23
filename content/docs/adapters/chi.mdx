@@ -32,20 +32,22 @@ func main() {
 	r := chi.NewRouter()
 
 	docs := openswag.New(openswag.Config{
-		Title:   "My API",
-		Version: "1.0.0",
+		Info: openswag.Info{
+			Title:   "My API",
+			Version: "1.0.0",
+		},
 	})
 
 	docs.Add(openswag.Endpoint{
 		Method:  "GET",
 		Path:    "/health",
 		Summary: "Health check",
-		Responses: []openswag.Response{
-			{Status: 200, Description: "OK"},
+		Responses: map[int]openswag.Response{
+			200: {Description: "OK"},
 		},
 	})
 
-	swagchi.Mount(r, "/docs", docs)
+	swagchi.Mount(r, docs, "/docs")
 
 	http.ListenAndServe(":8080", r)
 }
@@ -58,7 +60,7 @@ Chi's middleware stack applies to mounted documentation routes automatically. Fo
 ```go
 r.Group(func(r chi.Router) {
 	r.Use(authMiddleware)
-	swagchi.Mount(r, "/docs", docs)
+	swagchi.Mount(r, docs, "/docs")
 })
 ```
 

@@ -30,9 +30,11 @@ Alternatively, configure a CORS proxy in the UI config:
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:   "My API",
-    Version: "1.0.0",
-    UIConfig: openswag.UIConfig{
+    Info: openswag.Info{
+    	Title:   "My API",
+    	Version: "1.0.0",
+    },
+    UI: openswag.UIConfig{
         CORSProxyURL: "https://cors-proxy.internal.example.com",
     },
 })
@@ -51,14 +53,15 @@ docs := openswag.New(openswag.Config{
 **Solution:** Ensure all required fields are set on your endpoints:
 
 ```go
-docs.AddEndpoint(openswag.Endpoint{
+docs.Add(openswag.Endpoint{
     Method:  "GET",
     Path:    "/api/users",
     Summary: "List users",
-    Response: openswag.Response{
-        Status:      200,
-        Description: "Success", // Don't leave this empty
-        Body:        openswag.BodyFrom[[]User](),
+    Responses: map[int]openswag.Response{
+        200: {
+            Description: "Success", // Don't leave this empty
+            Schema:      []User{},
+        },
     },
 })
 ```
@@ -161,7 +164,7 @@ r.Handle("/docs", docs.Handler())
 
 // Good
 import chiadapter "github.com/gopackx/open-swag-go/adapters/chi"
-chiadapter.Mount(r, "/docs", docs)
+chiadapter.Mount(r, docs, "/docs")
 ```
 
 ### Gin: Conflicting Route Handlers
@@ -176,7 +179,7 @@ chiadapter.Mount(r, "/docs", docs)
 import ginadapter "github.com/gopackx/open-swag-go/adapters/gin"
 
 api := r.Group("/api")
-ginadapter.MountGroup(api, "/docs", docs)
+ginadapter.MountGroup(api, docs)
 ```
 
 ### Fiber: Docs Page Loads But UI Is Blank
@@ -190,7 +193,7 @@ ginadapter.MountGroup(api, "/docs", docs)
 ```go
 import fiberadapter "github.com/gopackx/open-swag-go/adapters/fiber"
 
-fiberadapter.Mount(app, "/docs", docs)
+fiberadapter.Mount(app, docs, "/docs")
 ```
 
 If the issue persists, check that no middleware is modifying response headers for the `/docs` path.
@@ -207,7 +210,7 @@ If the issue persists, check that no middleware is modifying response headers fo
 import echoadapter "github.com/gopackx/open-swag-go/adapters/echo"
 
 // Mount docs first (no auth)
-echoadapter.Mount(e, "/docs", docs)
+echoadapter.Mount(e, docs, "/docs")
 
 // Then apply auth middleware to API routes
 api := e.Group("/api", authMiddleware)

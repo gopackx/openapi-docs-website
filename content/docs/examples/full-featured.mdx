@@ -17,7 +17,6 @@ import (
 	"net/http"
 
 	openswag "github.com/gopackx/open-swag-go"
-	"github.com/gopackx/open-swag-go/pkg/auth"
 )
 
 // --- Struct-based parameters and models ---
@@ -100,11 +99,6 @@ func main() {
 		},
 	}
 
-	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
-		Description:  "JWT access token",
-		BearerFormat: "JWT",
-	})
-
 	endpoints := []openswag.Endpoint{
 		// --- Products ---
 		{
@@ -122,8 +116,8 @@ func main() {
 				{Name: "sort_by", In: "query", Description: "Sort field (name, price, category)"},
 				{Name: "order", In: "query", Description: "Sort order (asc, desc)"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Paginated product list", ContentType: "application/json"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Paginated product list"},
 			},
 		},
 		{
@@ -135,9 +129,9 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Product ID"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Product details", ContentType: "application/json"},
-				{StatusCode: 404, Description: "Product not found"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Product details"},
+				404: {Description: "Product not found"},
 			},
 		},
 		{
@@ -146,16 +140,16 @@ func main() {
 			Summary:     "Create a product",
 			Description: "Adds a new product to the catalog. Requires authentication.",
 			Tags:        []string{"Products"},
-			Security:    []auth.Scheme{bearerScheme},
+			Security:    []string{openswag.SecurityBearerAuth},
 			RequestBody: &openswag.RequestBody{
 				Description: "Product to create",
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 201, Description: "Product created", ContentType: "application/json"},
-				{StatusCode: 400, Description: "Validation error"},
-				{StatusCode: 401, Description: "Unauthorized"},
+			Responses: map[int]openswag.Response{
+				201: {Description: "Product created"},
+				400: {Description: "Validation error"},
+				401: {Description: "Unauthorized"},
 			},
 		},
 		// --- Orders ---
@@ -165,16 +159,16 @@ func main() {
 			Summary:     "Place an order",
 			Description: "Creates a new order from a list of product IDs and quantities.",
 			Tags:        []string{"Orders"},
-			Security:    []auth.Scheme{bearerScheme},
+			Security:    []string{openswag.SecurityBearerAuth},
 			RequestBody: &openswag.RequestBody{
 				Description: "Order details",
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 201, Description: "Order placed", ContentType: "application/json"},
-				{StatusCode: 400, Description: "Invalid order"},
-				{StatusCode: 401, Description: "Unauthorized"},
+			Responses: map[int]openswag.Response{
+				201: {Description: "Order placed"},
+				400: {Description: "Invalid order"},
+				401: {Description: "Unauthorized"},
 			},
 		},
 		{
@@ -183,22 +177,24 @@ func main() {
 			Summary:     "Get order status",
 			Description: "Returns the current status and details of an order.",
 			Tags:        []string{"Orders"},
-			Security:    []auth.Scheme{bearerScheme},
+			Security:    []string{openswag.SecurityBearerAuth},
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Order ID"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Order details", ContentType: "application/json"},
-				{StatusCode: 401, Description: "Unauthorized"},
-				{StatusCode: 404, Description: "Order not found"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Order details"},
+				401: {Description: "Unauthorized"},
+				404: {Description: "Order not found"},
 			},
 		},
 	}
 
-	docs := openswag.New(cfg, endpoints...)
+	docs := openswag.New(cfg)
 
+
+	docs.AddAll(endpoints...)
 	mux := http.NewServeMux()
-	openswag.Mount(mux, "/docs", docs)
+	docs.Mount(mux, "/docs")
 
 	fmt.Println("E-Commerce API docs at http://localhost:8080/docs")
 	http.ListenAndServe(":8080", mux)

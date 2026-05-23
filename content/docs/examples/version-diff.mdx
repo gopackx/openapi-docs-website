@@ -13,12 +13,12 @@ This example shows how to use the `versioning` package to compare two OpenAPI sp
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 
 	openswag "github.com/gopackx/open-swag-go"
-	"github.com/gopackx/open-swag-go/pkg/auth"
 	"github.com/gopackx/open-swag-go/pkg/versioning"
 )
 
@@ -37,8 +37,8 @@ func main() {
 			Path:    "/tasks",
 			Summary: "List tasks",
 			Tags:    []string{"Tasks"},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Task list", ContentType: "application/json"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Task list"},
 			},
 		},
 		{
@@ -51,8 +51,8 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 201, Description: "Task created", ContentType: "application/json"},
+			Responses: map[int]openswag.Response{
+				201: {Description: "Task created"},
 			},
 		},
 		{
@@ -63,14 +63,16 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Task ID"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 204, Description: "Task deleted"},
+			Responses: map[int]openswag.Response{
+				204: {Description: "Task deleted"},
 			},
 		},
 	}
 
-	v1Docs := openswag.New(v1Config, v1Endpoints...)
+	v1Docs := openswag.New(v1Config)
 
+
+	v1Docs.AddAll(v1Endpoints...)
 	// --- v2 spec ---
 	v2Config := openswag.Config{
 		Info: openswag.Info{
@@ -78,11 +80,6 @@ func main() {
 			Version: "2.0.0",
 		},
 	}
-
-	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
-		Description:  "JWT access token",
-		BearerFormat: "JWT",
-	})
 
 	v2Endpoints := []openswag.Endpoint{
 		{
@@ -95,8 +92,8 @@ func main() {
 				{Name: "page", In: "query", Description: "Page number"},
 				{Name: "limit", In: "query", Description: "Items per page"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Paginated task list", ContentType: "application/json"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Paginated task list"},
 			},
 		},
 		{
@@ -105,15 +102,15 @@ func main() {
 			Summary:  "Create a task",
 			Tags:     []string{"Tasks"},
 			// v2 adds auth requirement (breaking change)
-			Security: []auth.Scheme{bearerScheme},
+			Security: []string{openswag.SecurityBearerAuth},
 			RequestBody: &openswag.RequestBody{
 				Description: "Task to create",
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 201, Description: "Task created", ContentType: "application/json"},
-				{StatusCode: 401, Description: "Unauthorized"},
+			Responses: map[int]openswag.Response{
+				201: {Description: "Task created"},
+				401: {Description: "Unauthorized"},
 			},
 		},
 		// v2 replaces hard DELETE with soft-delete (breaking change)
@@ -122,13 +119,13 @@ func main() {
 			Path:     "/tasks/{id}/archive",
 			Summary:  "Archive a task",
 			Tags:     []string{"Tasks"},
-			Security: []auth.Scheme{bearerScheme},
+			Security: []string{openswag.SecurityBearerAuth},
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Task ID"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Task archived", ContentType: "application/json"},
-				{StatusCode: 401, Description: "Unauthorized"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Task archived"},
+				401: {Description: "Unauthorized"},
 			},
 		},
 		// v2 adds a new endpoint
@@ -140,47 +137,46 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Task ID"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Task change history", ContentType: "application/json"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Task change history"},
 			},
 		},
 	}
 
-	v2Docs := openswag.New(v2Config, v2Endpoints...)
+	v2Docs := openswag.New(v2Config)
 
-	// --- Compare the two specs ---
-	differ := versioning.Differ{
-		IgnoreDescriptions: true,
-	}
 
-	diff, err := differ.Compare(v1Docs.Spec(), v2Docs.Spec())
+	v2Docs.AddAll(v2Endpoints...)
+
+	// --- Compare the two specs (Compare takes decoded specs) ---
+	v1JSON, _ := v1Docs.SpecJSON()
+	v2JSON, _ := v2Docs.SpecJSON()
+
+	var v1Map, v2Map map[string]interface{}
+	json.Unmarshal(v1JSON, &v1Map)
+	json.Unmarshal(v2JSON, &v2Map)
+
+	differ := versioning.NewDiffer()
+	diff, err := differ.Compare(v1Map, v2Map)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	fmt.Printf("Total changes: %d\n", len(diff.Changes))
-	fmt.Printf("Breaking changes: %d\n", len(diff.BreakingChanges))
+	fmt.Printf("Breaking changes: %d\n", len(diff.Breaking))
 
 	// --- Generate changelog ---
-	changelogGen := versioning.ChangelogGenerator{
-		GroupByTag: true,
-		Format:     "markdown",
-	}
-	changelog, _ := changelogGen.Generate(diff)
-	fmt.Println("\n" + changelog)
+	changelog := versioning.NewChangelogGenerator().Generate(diff)
+	fmt.Println("\n" + changelog.ToMarkdown())
 
 	// --- Generate migration guide ---
-	migrationGen := versioning.MigrationGenerator{
-		IncludeExamples: true,
-		Format:          "markdown",
-	}
-	guide, _ := migrationGen.Generate(diff)
-	fmt.Println(guide)
+	guide := versioning.NewMigrationGenerator().Generate(diff)
+	fmt.Println(guide.ToMarkdown())
 
 	// --- Optionally serve both versions side by side ---
 	mux := http.NewServeMux()
-	openswag.Mount(mux, "/docs/v1", v1Docs)
-	openswag.Mount(mux, "/docs/v2", v2Docs)
+	v1Docs.Mount(mux, "/docs/v1")
+	v2Docs.Mount(mux, "/docs/v2")
 
 	fmt.Println("\nv1 docs: http://localhost:8080/docs/v1")
 	fmt.Println("v2 docs: http://localhost:8080/docs/v2")
@@ -202,11 +198,11 @@ func main() {
 
 ### Building specs programmatically
 
-Instead of loading YAML files, this example builds both v1 and v2 specs in code using `openswag.New`. The `Spec()` method returns the generated OpenAPI document that the differ can compare.
+Instead of loading YAML files, this example builds both v1 and v2 specs in code using `openswag.New`. `SpecJSON()` returns the generated OpenAPI document as JSON; decode each into a `map[string]interface{}` and pass them to `Differ.Compare`.
 
-### Differ configuration
+### Differ
 
-`IgnoreDescriptions: true` filters out description-only changes so the diff focuses on structural differences that affect API consumers.
+Create the differ with `versioning.NewDiffer()`, then call `Compare(oldSpec, newSpec)` (or `CompareFiles(oldPath, newPath)` to read from disk).
 
 ### Breaking change detection
 
@@ -221,7 +217,7 @@ The differ automatically flags backwards-incompatible changes:
 
 ### Migration guide
 
-`MigrationGenerator` produces step-by-step instructions for API consumers to update their client code. With `IncludeExamples: true`, it includes code snippets showing the old and new usage.
+`MigrationGenerator` produces a `*MigrationGuide`; call `ToMarkdown()` for step-by-step instructions (with before/after snippets) that API consumers can follow to update their client code.
 
 ### Serving multiple versions
 
@@ -234,10 +230,10 @@ Use the differ in a CI pipeline to block merges that introduce breaking changes:
 ```go title="ci_check.go"
 diff, _ := differ.Compare(mainSpec, prSpec)
 
-if len(diff.BreakingChanges) > 0 {
+if diff.HasBreakingChanges() {
 	fmt.Println("❌ Breaking changes detected:")
-	for _, bc := range diff.BreakingChanges {
-		fmt.Printf("  [%s] %s %s — %s\n", bc.Severity, bc.Method, bc.Path, bc.Description)
+	for _, bc := range diff.Breaking {
+		fmt.Printf("  %s %s — %s\n", bc.Method, bc.Path, bc.Reason)
 	}
 	os.Exit(1)
 }

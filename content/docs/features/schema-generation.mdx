@@ -303,14 +303,11 @@ openswag.Endpoint{
 		Required:    true,
 		Schema:      CreateOrderRequest{},
 	},
-	Responses: []openswag.Response{
-		{
-			StatusCode:  201,
-			Description: "Order created",
-			ContentType: "application/json",
+	Responses: map[int]openswag.Response{
+		201: {Description: "Order created",
 			Schema:      OrderResponse{},
 		},
-		{StatusCode: 400, Description: "Validation error"},
+		400: {Description: "Validation error"},
 	},
 }
 ```

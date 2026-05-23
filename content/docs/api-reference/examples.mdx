@@ -1,15 +1,26 @@
 ---
 title: Examples Package
-description: API reference for pkg/examples — smart example value generation from Go struct fields and tags.
+description: API reference for pkg/examples — example value generation from Go struct fields and tags.
 ---
 
 # Examples Package
 
-`pkg/examples` generates realistic example values for OpenAPI schemas by inspecting Go struct field names, types, and tags. It powers the automatic example population in the docs UI.
+`pkg/examples` generates example values for OpenAPI schemas by inspecting Go struct fields, types, and tags. It powers the automatic example population in the docs UI.
 
 ```go
 import "github.com/gopackx/open-swag-go/pkg/examples"
 ```
+
+## Config
+
+```go
+type Config struct {
+    UseFaker     bool                   // Use the Faker for realistic values
+    TypeExamples map[string]interface{} // Per-format default examples
+}
+```
+
+When `TypeExamples` is nil, `New` falls back to `DefaultTypeExamples()`.
 
 ## Generator
 
@@ -20,28 +31,23 @@ type Generator struct {
     // unexported fields
 }
 
-func New(opts ...Option) *Generator
+func New(config Config) *Generator
+func DefaultTypeExamples() map[string]interface{}
 ```
 
 ### Methods
 
 ```go
-func (g *Generator) Generate(v interface{}) interface{}
+func (g *Generator) Generate(t interface{}) interface{}
 ```
 
-Accepts any Go value and returns a populated copy with realistic example data. Struct fields with an `example` tag use the tag value; other fields are inferred from the field name and type.
+Accepts any Go value and returns a populated example. Struct fields with an `example` tag use the tag value; other fields are inferred from the field name and type.
 
 ```go
-func (g *Generator) GenerateJSON(v interface{}) ([]byte, error)
+func (g *Generator) GenerateJSON(t interface{}) map[string]interface{}
 ```
 
-Same as `Generate` but returns the result as JSON bytes.
-
-```go
-func (g *Generator) GenerateMap(v interface{}) map[string]interface{}
-```
-
-Returns the example as a flat map, useful for injecting into OpenAPI spec examples.
+Returns the example as a `map[string]interface{}`, ready to embed into an OpenAPI spec.
 
 ### Usage
 
@@ -52,150 +58,65 @@ type User struct {
     Email string `json:"email"`
 }
 
-gen := examples.New()
+gen := examples.New(examples.Config{UseFaker: true})
 ex := gen.Generate(User{})
-// ex == User{ID: 42, Name: "Alice", Email: "alice@example.com"}
 ```
 
-## ConvertExampleToType (v1.1.0+)
-
-Coerces string example values from struct tags to the correct Go type based on the field's type.
-
-```go
-func ConvertExampleToType(value string, fieldType reflect.Type) interface{}
-```
-
-Prior to v1.1.0, example tag values were always stored as strings, even for numeric or boolean fields. This function ensures that `example:"42"` on an `int64` field produces the integer `42`, not the string `"42"`.
-
-Supported conversions:
-
-| Field Type | Input String | Result |
-|-----------|-------------|--------|
-| `int`, `int64` | `"42"` | `int64(42)` |
-| `float64` | `"9.99"` | `float64(9.99)` |
-| `bool` | `"true"` | `true` |
-| `[]interface{}` | `"[1,2,3]"` | `[]interface{}{1, 2, 3}` |
-
-```go
-// Previously: example:"42" on int64 field → "42" (string) in schema
-// Now:        example:"42" on int64 field → 42 (integer) in schema
-```
-
-This conversion is applied automatically in schema generation, example generation, and OpenAPI spec building.
+> Coercion of string `example:"..."` tag values to typed values (e.g. `int64(42)` instead of `"42"`) is handled by `schema.ConvertExampleToType` in `pkg/schema`, and is applied automatically during schema/example generation.
 
 ## Faker
 
-Low-level value generator that produces realistic data based on field name heuristics.
+Low-level value generator that produces realistic data.
 
 ```go
 type Faker struct {
     // unexported fields
 }
 
-func NewFaker(opts ...Option) *Faker
+func NewFaker() *Faker
 ```
 
 ### Methods
 
 ```go
-func (f *Faker) Value(fieldName string, fieldType reflect.Type) interface{}
+func (f *Faker) String() string
+func (f *Faker) Name() string
+func (f *Faker) Email() string
+func (f *Faker) Phone() string
+func (f *Faker) URL() string
+func (f *Faker) UUID() string
+func (f *Faker) Int(min, max int) int
+func (f *Faker) Float(min, max float64) float64
+func (f *Faker) Bool() bool
+func (f *Faker) Date() string
+func (f *Faker) DateTime() string
+func (f *Faker) IPv4() string
+func (f *Faker) Sentence() string
+func (f *Faker) Paragraph() string
 ```
-
-Returns a realistic value for the given field name and Go type. The field name is matched against built-in heuristics (see table below).
-
-```go
-func (f *Faker) String(fieldName string) string
-```
-
-Returns a string value based on the field name.
-
-```go
-func (f *Faker) Int(fieldName string) int64
-```
-
-Returns an integer value based on the field name.
-
-```go
-func (f *Faker) Float(fieldName string) float64
-```
-
-Returns a float value based on the field name.
-
-### Field Name Heuristics
-
-The Faker recognises common field names and generates appropriate values.
-
-| Field Name Pattern | Generated Value |
-|--------------------|----------------|
-| `id`, `*_id` | Sequential integer (1, 2, 3…) |
-| `name`, `*_name` | Realistic name, e.g. "Alice Johnson" |
-| `email`, `*_email` | Email address, e.g. "alice@example.com" |
-| `phone`, `*_phone` | Phone number, e.g. "+1-555-0100" |
-| `url`, `*_url`, `website` | URL, e.g. "https://example.com" |
-| `address`, `*_address` | Street address |
-| `city` | City name |
-| `country` | Country name |
-| `zip`, `postal_code` | Postal code |
-| `price`, `amount`, `*_price` | Monetary value, e.g. 29.99 |
-| `created_at`, `updated_at`, `*_at` | ISO 8601 timestamp |
-| `description`, `bio`, `summary` | Lorem-style sentence |
-| `status` | "active" |
-| `enabled`, `active`, `is_*` | `true` |
 
 ### Usage
 
 ```go
 faker := examples.NewFaker()
 
-email := faker.String("email")       // "alice@example.com"
-price := faker.Float("price")        // 29.99
-userID := faker.Int("user_id")       // 1
+email := faker.Email()        // "alice@example.com"
+price := faker.Float(1, 100)  // e.g. 29.99
+id := faker.Int(1, 1000)      // e.g. 42
+name := faker.Name()          // e.g. "Alice Johnson"
 ```
 
-## Config
+## TemplateRegistry
 
-Functional options for customising the generator and faker behaviour.
-
-```go
-type Option func(*config)
-```
+A registry of named example templates.
 
 ```go
-func WithSeed(seed int64) Option
-```
+func NewTemplateRegistry() *TemplateRegistry
 
-Sets a fixed random seed for deterministic output. Useful for snapshot tests.
-
-```go
-func WithLocale(locale string) Option
-```
-
-Sets the locale for generated strings (e.g. `"en"`, `"de"`, `"ja"`). Defaults to `"en"`.
-
-```go
-func WithCustomField(pattern string, value interface{}) Option
-```
-
-Registers a custom heuristic. When a field name matches the pattern, the provided value is used.
-
-### Usage
-
-```go
-gen := examples.New(
-    examples.WithSeed(12345),
-    examples.WithCustomField("tenant_id", "org_abc123"),
-)
-
-type Order struct {
-    TenantID  string  `json:"tenant_id"`
-    ProductID int64   `json:"product_id" example:"7"`
-    Quantity  int     `json:"quantity"`
-}
-
-ex := gen.Generate(Order{})
-// ex.TenantID == "org_abc123"  (custom field)
-// ex.ProductID == 7            (from example tag)
-// ex.Quantity == 1             (default int)
+func (r *TemplateRegistry) Register(name string, template Template)
+func (r *TemplateRegistry) Get(name string) (Template, bool)
+func (r *TemplateRegistry) GetValue(name string) (any, bool)
+func (r *TemplateRegistry) All() map[string]Template
 ```
 
 ## Quick Example
@@ -218,9 +139,9 @@ type CreateUserRequest struct {
 }
 
 func main() {
-    gen := examples.New(examples.WithSeed(1))
-    data, _ := gen.GenerateJSON(CreateUserRequest{})
+    gen := examples.New(examples.Config{UseFaker: true})
+    ex := gen.GenerateJSON(CreateUserRequest{})
+    data, _ := json.MarshalIndent(ex, "", "  ")
     fmt.Println(string(data))
-    // {"name":"Bob","email":"bob@example.com","age":30,"country":"United States"}
 }
 ```

@@ -13,14 +13,15 @@ Top-level configuration passed to `openswag.New()`.
 
 ```go
 type Config struct {
-    Info        Info        // API metadata (title, version, description)
-    Servers     []Server    // Server URLs shown in the docs UI
-    Tags        []Tag       // Logical groupings for endpoints
-    UIConfig    UIConfig    // Scalar UI appearance settings
-    DocsAuth    *DocsAuth   // Optional password/API-key protection for the docs page
-    BasePath    string      // URL prefix where docs are mounted, e.g. "/docs"
+    Info     Info       // API metadata (title, version, description)
+    Servers  []Server   // Server URLs shown in the docs UI
+    Tags     []Tag      // Logical groupings for endpoints
+    UI       UIConfig   // Scalar UI appearance settings
+    DocsAuth *DocsAuth  // Optional password/API-key protection for the docs page
 }
 ```
+
+> The mount path (e.g. `/docs`) is passed to `docs.Mount(mux, "/docs")`, not configured on `Config`.
 
 ### Fields
 
@@ -29,16 +30,15 @@ type Config struct {
 | `Info` | `Info` | API title, version, description, contact, and license |
 | `Servers` | `[]Server` | Base URLs displayed in the server dropdown |
 | `Tags` | `[]Tag` | Grouping tags that organise endpoints in the sidebar |
-| `UIConfig` | `UIConfig` | Theme, layout, and Scalar UI options |
+| `UI` | `UIConfig` | Theme, layout, and Scalar UI options |
 | `DocsAuth` | `*DocsAuth` | Protect the docs page with basic auth or an API key |
-| `BasePath` | `string` | Mount path prefix for the documentation routes |
 
 ## Docs
 
 `Docs` is the main handle returned by `openswag.New()`. It holds the compiled spec and serves the UI.
 
 ```go
-func New(cfg Config, endpoints ...Endpoint) *Docs
+func New(cfg Config) *Docs
 ```
 
 ```go
@@ -46,17 +46,26 @@ type Docs struct {
     // unexported fields
 }
 
-func (d *Docs) Spec() []byte          // Returns the JSON OpenAPI spec
-func (d *Docs) Handler() http.Handler // Returns an http.Handler that serves the docs UI
+func (d *Docs) Add(endpoint Endpoint)                       // Register one endpoint
+func (d *Docs) AddAll(endpoints ...Endpoint)                // Register multiple endpoints
+func (d *Docs) Mount(mux *http.ServeMux, basePath string)   // Serve UI + spec on a ServeMux
+func (d *Docs) Handler() http.HandlerFunc                   // Handler that serves the docs UI
+func (d *Docs) SpecHandler() http.HandlerFunc               // Handler that serves the raw OpenAPI JSON
+func (d *Docs) SpecJSON() ([]byte, error)                   // The OpenAPI spec as JSON bytes
+func (d *Docs) BuildSpec() *spec.OpenAPI                    // The compiled spec object
+func (d *Docs) GetUIConfig() (string, error)                // Serialized UI config (advanced)
 ```
 
 ### Usage
 
 ```go
-docs := openswag.New(cfg, endpoints...)
+docs := openswag.New(cfg)
+docs.AddAll(endpoints...)
 
 // Serve with net/http
-http.Handle("/docs/", docs.Handler())
+mux := http.NewServeMux()
+docs.Mount(mux, "/docs")
+http.ListenAndServe(":8080", mux)
 ```
 
 ## Endpoint
@@ -65,16 +74,18 @@ Describes a single API operation.
 
 ```go
 type Endpoint struct {
-    Method      string        // HTTP method: GET, POST, PUT, PATCH, DELETE
-    Path        string        // URL path, e.g. "/users/{id}"
-    Summary     string        // Short one-line description
-    Description string        // Detailed explanation (Markdown supported)
-    Tags        []string      // Grouping tags for the sidebar
-    Parameters  []Parameter   // Path, query, and header parameters
-    RequestBody *RequestBody  // Request body (nil for GET/DELETE)
-    Responses   []Response    // Possible responses
-    Security    []string      // Security scheme names applied to this endpoint
-    Deprecated  bool          // Mark the endpoint as deprecated
+    Method      string            // HTTP method: GET, POST, PUT, PATCH, DELETE
+    Path        string            // URL path, e.g. "/users/{id}"
+    Summary     string            // Short one-line description
+    Description string            // Detailed explanation (Markdown supported)
+    Tags        []string          // Grouping tags for the sidebar
+    Parameters  []Parameter       // Path, query, and header parameters (manual)
+    QueryParams interface{}       // Struct whose fields become query params (form/description/example tags)
+    PathParams  interface{}       // Struct whose fields become path params (param tag)
+    RequestBody *RequestBody      // Request body (nil for GET/DELETE)
+    Responses   map[int]Response  // Responses keyed by HTTP status code
+    Security    []string          // Security scheme names applied to this endpoint
+    Deprecated  bool              // Mark the endpoint as deprecated
 }
 ```
 
@@ -87,9 +98,11 @@ type Endpoint struct {
 | `Summary` | `string` | One-line summary shown in the sidebar |
 | `Description` | `string` | Longer description, supports Markdown |
 | `Tags` | `[]string` | Groups the endpoint under one or more sidebar sections |
-| `Parameters` | `[]Parameter` | Path, query, and header parameters |
+| `Parameters` | `[]Parameter` | Manually declared path, query, and header parameters |
+| `QueryParams` | `interface{}` | A struct whose fields (with `form` tags) become query parameters |
+| `PathParams` | `interface{}` | A struct whose fields (with `param` tags) become path parameters |
 | `RequestBody` | `*RequestBody` | Payload definition for write operations |
-| `Responses` | `[]Response` | Status-code keyed response definitions |
+| `Responses` | `map[int]Response` | Responses keyed by HTTP status code |
 | `Security` | `[]string` | Names of security schemes this endpoint requires |
 | `Deprecated` | `bool` | Flags the endpoint as deprecated in the spec |
 
@@ -99,11 +112,12 @@ Describes a single path, query, or header parameter.
 
 ```go
 type Parameter struct {
-    Name        string      // Parameter name, e.g. "id"
-    In          string      // Location: "path", "query", or "header"
-    Description string      // Human-readable description
-    Required    bool        // Whether the parameter is mandatory
-    Schema      interface{} // Go type used for schema generation
+    Name        string       // Parameter name, e.g. "id"
+    In          string       // Location: "path", "query", "header", or "cookie"
+    Description string       // Human-readable description
+    Required    bool         // Whether the parameter is mandatory
+    Schema      *spec.Schema // Parameter schema (e.g. spec.NewSchema("string"))
+    Example     interface{}  // Optional example value
 }
 ```
 
@@ -128,11 +142,18 @@ Describes a possible response for an endpoint.
 
 ```go
 type Response struct {
-    StatusCode  int         // HTTP status code
     Description string      // What this response means
-    ContentType string      // MIME type (optional)
     Schema      interface{} // Go struct for schema generation (optional)
 }
+```
+
+Responses are keyed by status code in the `Endpoint.Responses` map, so the status code is the map key — not a field:
+
+```go
+Responses: map[int]openswag.Response{
+    200: {Description: "A list of pets", Schema: []Pet{}},
+    404: {Description: "Not found"},
+},
 ```
 
 ## UIConfig
@@ -141,11 +162,14 @@ Controls the Scalar-based documentation UI appearance.
 
 ```go
 type UIConfig struct {
-    Theme       string // Predefined theme: "purple", "blue", "green", "light"
-    DarkMode    bool   // Enable dark mode by default
-    CustomCSS   string // Raw CSS injected into the docs page
-    HideModels  bool   // Hide the Models section in the sidebar
-    Layout      string // Layout style: "modern" (default) or "classic"
+    Theme              string // Predefined theme: "purple", "blue", "green", "light"
+    DarkMode           bool   // Enable dark mode by default
+    Layout             string // Layout style, e.g. "modern"
+    ShowSidebar        bool   // Show the navigation sidebar
+    SidebarSearch      bool   // Enable the sidebar search box
+    TagGrouping        bool   // Group endpoints by tag
+    CollapsibleSchemas bool   // Render schemas as collapsible sections
+    CustomCSS          string // Raw CSS injected into the docs page
 }
 ```
 
@@ -155,9 +179,11 @@ Protects the documentation page with credentials.
 
 ```go
 type DocsAuth struct {
+    Enabled  bool   // Turn protection on
     Username string // Basic auth username
     Password string // Basic auth password
-    APIKey   string // Alternative: protect with an API key header
+    Realm    string // Basic auth realm (optional)
+    APIKey   string // Alternative: protect with an API key (?key=...)
 }
 ```
 
@@ -223,37 +249,38 @@ type License struct {
 }
 ```
 
-## Helper Functions
+## Parameters from structs
 
-### ParametersFromStruct
-
-Generates a `[]Parameter` slice from a tagged Go struct.
+Instead of declaring `Parameters` by hand, set `Endpoint.QueryParams` or `Endpoint.PathParams` to a struct value. Query-param fields use the `form` tag; path-param fields use the `param` tag. The `description` and `example` tags annotate each parameter.
 
 ```go
-func ParametersFromStruct(v interface{}) []Parameter
+type ListProductsQuery struct {
+    Page     int    `form:"page" description:"Page number" example:"1"`
+    PerPage  int    `form:"per_page" description:"Items per page" example:"20"`
+    Category string `form:"category" description:"Filter by category ID"`
+}
+
+type ProductPathParams struct {
+    ID string `param:"id" description:"Product ID" example:"prod_123"`
+}
+
+openswag.Endpoint{
+    Method:      "GET",
+    Path:        "/products/{id}",
+    PathParams:  ProductPathParams{},
+    QueryParams: ListProductsQuery{},
+    // ...
+}
 ```
 
-```go
-type ListParams struct {
-    Page  int    `query:"page"  description:"Page number"  example:"1"`
-    Limit int    `query:"limit" description:"Items per page" example:"20"`
-}
-
-params := openswag.ParametersFromStruct(ListParams{})
-```
-
-In v1.1.0+, `ParametersFromStruct` prefers location-specific tags over generic tags. For query parameters, the `query` tag is used first; for path parameters, the `path` tag is used first. Generic tags (`json`, `description`, `example`) are used as fallbacks.
+For full control you can still declare `Parameters` manually with `spec.NewSchema`:
 
 ```go
-type GetUserParams struct {
-    // path tag is preferred for path parameters
-    ID int64 `path:"id" json:"user_id" description:"User ID" example:"42"`
-}
+import "github.com/gopackx/open-swag-go/pkg/spec"
 
-type ListUsersParams struct {
-    // query tag is preferred for query parameters
-    Status string `query:"status" json:"filter_status" description:"Filter by status"`
-}
+Parameters: []openswag.Parameter{
+    {Name: "id", In: "path", Description: "User ID", Required: true, Schema: spec.NewSchema("string")},
+},
 ```
 
 ## Quick Example
@@ -283,13 +310,16 @@ func main() {
             Path:    "/pets",
             Summary: "List all pets",
             Tags:    []string{"Pets"},
-            Responses: []openswag.Response{
-                {StatusCode: 200, Description: "A list of pets", ContentType: "application/json"},
+            Responses: map[int]openswag.Response{
+                200: {Description: "A list of pets"},
             },
         },
     }
 
-    docs := openswag.New(cfg, endpoints...)
+    docs := openswag.New(cfg)
+
+
+    docs.AddAll(endpoints...)
     http.Handle("/docs/", docs.Handler())
     http.ListenAndServe(":8080", nil)
 }

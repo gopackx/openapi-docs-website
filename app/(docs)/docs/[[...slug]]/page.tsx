@@ -3,6 +3,7 @@ import { DocsPage, DocsBody } from 'fumadocs-ui/page';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
+import { LlmActions } from '@/components/llm-actions';
 
 export async function generateMetadata(props: {
   params: Promise<{ slug?: string[] }>;
@@ -52,6 +53,10 @@ export default async function Page(props: {
   return (
     <DocsPage toc={page.data.toc}>
       <DocsBody>
+        <LlmActions
+          markdownUrl={`${page.url}.mdx`}
+          shareUrl={`${SITE_URL}${page.url}.mdx`}
+        />
         <MDX components={{ ...defaultMdxComponents }} />
       </DocsBody>
     </DocsPage>
@@ -62,6 +67,7 @@ export function generateStaticParams() {
   return source.generateParams();
 }
 
+const SITE_URL = 'https://open-swaggo.andrianprasetya.com';
 const ORANGE = '#f97316';
 const ORANGE_TINT = 'rgba(249, 115, 22, 0.08)';
 const ORANGE_RING = 'rgba(249, 115, 22, 0.20)';
@@ -127,9 +133,9 @@ function Hero() {
           lineHeight: 1.6,
         }}
       >
-        A Go library to generate OpenAPI 3 / Swagger 2 specifications directly from your source
-        code annotations — no runtime overhead, idiomatic Go, and compatible with any HTTP
-        framework.
+        A Go library that generates OpenAPI 3 documentation from co-located struct
+        definitions and standard struct tags — served with a modern Scalar UI, a built-in
+        try-it console, and first-class adapters for Gin, Echo, Fiber, Chi, and net/http.
       </p>
       <div
         style={{
@@ -160,15 +166,15 @@ function Meta({ icon, label }: { icon: 'timer' | 'tag' | 'calendar'; label: stri
 const findItems = [
   {
     icon: 'type',
-    title: 'Annotation-Driven Generation',
+    title: 'Struct-Based Definitions',
     description:
-      'Add concise comment directives above your Go handlers to describe routes, parameters, and responses — open-swaggo parses them into a complete OpenAPI spec.',
+      'Describe endpoints as openswag.Endpoint values co-located with your handlers, and let schemas be derived from standard Go struct tags (json, example, format, swagger).',
   },
   {
     icon: 'zap',
-    title: 'Zero Runtime Overhead',
+    title: 'Modern Scalar UI',
     description:
-      'Specs are generated at build time as static JSON/YAML files — nothing runs in your hot path, and you ship the same binary to production.',
+      'Serve interactive docs with a built-in Scalar UI — dark mode, predefined themes (purple, blue, green, light), and an in-browser try-it console.',
   },
   {
     icon: 'puzzle',
@@ -178,9 +184,9 @@ const findItems = [
   },
   {
     icon: 'terminal',
-    title: 'Powerful CLI',
+    title: 'Try-It Console & Snippets',
     description:
-      'A single open-swaggo init scaffolds config; open-swaggo gen produces both Swagger UI-ready JSON and OpenAPI 3.1 YAML on every build.',
+      'Send live API requests from the docs and copy ready-to-use code snippets in curl, JavaScript, Go, and Python — plus a Bearer / API Key / Basic / Cookie auth playground.',
   },
 ] as const;
 
@@ -292,8 +298,8 @@ function QuickInstall() {
           lineHeight: 1.55,
         }}
       >
-        Add open-swaggo to your project with a single <code>go install</code> command. No extra
-        configuration needed.
+        Add open-swag-go to your project with a single <code>go get</code> command, then pull
+        in a framework adapter if you need one.
       </p>
       <DocsCodeBlock />
     </section>
@@ -306,12 +312,18 @@ function DocsCodeBlock() {
       num: 1,
       text: (
         <>
-          <CodeKw>go install</CodeKw> github.com/gopackx/open-swag-go@latest
+          <CodeKw>go get</CodeKw> github.com/gopackx/open-swag-go
         </>
       ),
     },
-    { num: 2, text: <CodeKw>open-swaggo init</CodeKw> },
-    { num: 3, text: <CodeKw>open-swaggo gen ./...</CodeKw> },
+    {
+      num: 2,
+      text: (
+        <>
+          <CodeKw>go get</CodeKw> github.com/gopackx/open-swag-go/adapters/gin
+        </>
+      ),
+    },
   ];
   return (
     <div

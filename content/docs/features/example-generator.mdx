@@ -36,29 +36,27 @@ The `Generator` struct controls how examples are produced:
 ```go title="generator_type.go"
 import "github.com/gopackx/open-swag-go/pkg/examples"
 
-gen := examples.NewGenerator(examples.Config{
-	UseDefaults: true,  // Fall back to type-based defaults
-	UseFaker:    true,  // Enable smart field name heuristics
-	Seed:        42,    // Fixed seed for reproducible output
+gen := examples.New(examples.Config{
+	UseFaker: true, // Use the Faker for realistic values
 })
 
-example := gen.Generate(User{})
+example := gen.Generate(User{})         // populated value
+asMap := gen.GenerateJSON(User{})       // map[string]interface{}
 ```
 
 ### Config options
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `UseDefaults` | `bool` | Use type-based defaults when no tag or heuristic matches |
-| `UseFaker` | `bool` | Enable the Faker for field name heuristics |
-| `Seed` | `int64` | Random seed for reproducible examples |
+| `UseFaker` | `bool` | Use the Faker to produce realistic values |
+| `TypeExamples` | `map[string]interface{}` | Per-format default examples (defaults to `DefaultTypeExamples()` when nil) |
 
 ## Faker
 
 The `Faker` provides realistic values based on field names. It matches common naming patterns and returns appropriate sample data.
 
 ```go title="faker_usage.go"
-faker := examples.NewFaker(42)
+faker := examples.NewFaker()
 
 faker.Name()      // "Alice Johnson"
 faker.Email()     // "alice.johnson@example.com"
@@ -168,40 +166,34 @@ type UserResponse struct {
 }
 
 func main() {
-	gen := examples.NewGenerator(examples.Config{
-		UseFaker: true,
-		Seed:     42,
+	// Generate example values standalone.
+	gen := examples.New(examples.Config{UseFaker: true})
+	_ = gen.GenerateJSON(CreateUserRequest{})
+
+	docs := openswag.New(openswag.Config{
+		Info: openswag.Info{
+			Title:   "User API",
+			Version: "1.0.0",
+		},
 	})
 
-	docs := openswag.Config{
-		Title:   "User API",
-		Version: "1.0.0",
-		ExampleGenerator: gen,
-		Endpoints: []openswag.Endpoint{
-			{
-				Method:  "POST",
-				Path:    "/users",
-				Summary: "Create a user",
-				Tags:    []string{"Users"},
-				RequestBody: &openswag.RequestBody{
-					ContentType: "application/json",
-					Required:    true,
-					Schema:      CreateUserRequest{},
-				},
-				Responses: []openswag.Response{
-					{
-						StatusCode:  201,
-						Description: "User created",
-						ContentType: "application/json",
-						Schema:      UserResponse{},
-					},
-				},
-			},
+	docs.Add(openswag.Endpoint{
+		Method:  "POST",
+		Path:    "/users",
+		Summary: "Create a user",
+		Tags:    []string{"Users"},
+		RequestBody: &openswag.RequestBody{
+			ContentType: "application/json",
+			Required:    true,
+			Schema:      CreateUserRequest{},
 		},
-	}
+		Responses: map[int]openswag.Response{
+			201: {Description: "User created", Schema: UserResponse{}},
+		},
+	})
 
 	mux := http.NewServeMux()
-	adapter.Mount(mux, docs)
+	adapter.Mount(mux, docs, "/docs")
 
 	http.ListenAndServe(":8080", mux)
 }

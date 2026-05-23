@@ -17,7 +17,6 @@ import (
 	"net/http"
 
 	openswag "github.com/gopackx/open-swag-go"
-	"github.com/gopackx/open-swag-go/pkg/auth"
 )
 
 // Tenant holds the configuration for a single tenant's API docs.
@@ -38,8 +37,8 @@ func main() {
 			Path:    "/users",
 			Summary: "List users",
 			Tags:    []string{"Users"},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "User list", ContentType: "application/json"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "User list"},
 			},
 		},
 		{
@@ -52,17 +51,12 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 201, Description: "User created", ContentType: "application/json"},
-				{StatusCode: 400, Description: "Validation error"},
+			Responses: map[int]openswag.Response{
+				201: {Description: "User created"},
+				400: {Description: "Validation error"},
 			},
 		},
 	}
-
-	bearerScheme := auth.BearerAuth(auth.BearerAuthConfig{
-		Description:  "Tenant-scoped JWT",
-		BearerFormat: "JWT",
-	})
 
 	// --- Define per-tenant configurations ---
 	tenants := []Tenant{
@@ -81,10 +75,10 @@ func main() {
 				Path:     "/billing/invoices",
 				Summary:  "List invoices",
 				Tags:     []string{"Billing"},
-				Security: []auth.Scheme{bearerScheme},
-				Responses: []openswag.Response{
-					{StatusCode: 200, Description: "Invoice list", ContentType: "application/json"},
-					{StatusCode: 401, Description: "Unauthorized"},
+				Security: []string{openswag.SecurityBearerAuth},
+				Responses: map[int]openswag.Response{
+					200: {Description: "Invoice list"},
+					401: {Description: "Unauthorized"},
 				},
 			}),
 		},
@@ -94,9 +88,8 @@ func main() {
 			ServerURL: "https://globex.api.example.com",
 			Theme:     "purple",
 			DocsAuth: &openswag.DocsAuth{
-				Enabled:      true,
-				APIKey:       "globex-key-123",
-				APIKeyHeader: "X-Docs-Key",
+				Enabled: true,
+				APIKey:  "globex-key-123",
 			},
 			Endpoints: append(sharedEndpoints,
 				openswag.Endpoint{
@@ -104,14 +97,14 @@ func main() {
 					Path:     "/analytics/events",
 					Summary:  "List analytics events",
 					Tags:     []string{"Analytics"},
-					Security: []auth.Scheme{bearerScheme},
+					Security: []string{openswag.SecurityBearerAuth},
 					Parameters: []openswag.Parameter{
 						{Name: "from", In: "query", Description: "Start date (ISO 8601)"},
 						{Name: "to", In: "query", Description: "End date (ISO 8601)"},
 					},
-					Responses: []openswag.Response{
-						{StatusCode: 200, Description: "Event list", ContentType: "application/json"},
-						{StatusCode: 401, Description: "Unauthorized"},
+					Responses: map[int]openswag.Response{
+						200: {Description: "Event list"},
+						401: {Description: "Unauthorized"},
 					},
 				},
 				openswag.Endpoint{
@@ -119,10 +112,10 @@ func main() {
 					Path:     "/analytics/summary",
 					Summary:  "Get analytics summary",
 					Tags:     []string{"Analytics"},
-					Security: []auth.Scheme{bearerScheme},
-					Responses: []openswag.Response{
-						{StatusCode: 200, Description: "Summary data", ContentType: "application/json"},
-						{StatusCode: 401, Description: "Unauthorized"},
+					Security: []string{openswag.SecurityBearerAuth},
+					Responses: map[int]openswag.Response{
+						200: {Description: "Summary data"},
+						401: {Description: "Unauthorized"},
 					},
 				},
 			),
@@ -151,14 +144,17 @@ func main() {
 				{URL: t.ServerURL, Description: fmt.Sprintf("%s environment", t.Name)},
 			},
 			DocsAuth: t.DocsAuth,
-			UI: &openswag.UIConfig{
+			UI: openswag.UIConfig{
 				Theme: t.Theme,
 			},
 		}
 
-		docs := openswag.New(cfg, t.Endpoints...)
+		docs := openswag.New(cfg)
+
+
+		docs.AddAll(t.Endpoints...)
 		path := fmt.Sprintf("/docs/%s", t.Slug)
-		openswag.Mount(mux, path, docs)
+		docs.Mount(mux, path)
 
 		fmt.Printf("  %s docs: http://localhost:8080%s\n", t.Name, path)
 	}
@@ -204,7 +200,7 @@ The `UIConfig.Theme` field sets the Scalar UI theme for each tenant. Acme gets a
 
 ### Per-tenant docs auth
 
-Each tenant can have different docs auth settings. Acme uses basic auth, Globex uses an API key in a custom header, and Initech has public docs with no auth.
+Each tenant can have different docs auth settings. Acme uses basic auth, Globex uses an API key (accessed via `?key=`), and Initech has public docs with no auth.
 
 ### Tenant directory
 
@@ -220,8 +216,10 @@ tenants, _ := tenantStore.ListAll()
 
 for _, t := range tenants {
 	cfg := buildConfigForTenant(t)
-	docs := openswag.New(cfg, t.Endpoints...)
-	openswag.Mount(mux, fmt.Sprintf("/docs/%s", t.Slug), docs)
+	docs := openswag.New(cfg)
+
+	docs.AddAll(t.Endpoints...)
+	docs.Mount(mux, fmt.Sprintf("/docs/%s", t.Slug))
 }
 ```
 

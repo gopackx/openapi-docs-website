@@ -1,37 +1,40 @@
 ---
 title: Theming
-description: Customize the look and feel of your API docs with ScalarConfig, predefined themes, dark mode support, and custom CSS.
+description: Customize the look and feel of your API docs with UIConfig — predefined themes, dark mode, layout options, and custom CSS.
 ---
 
 # Theming
 
-Open-swag-go uses [Scalar](https://github.com/scalar/scalar) to render your API documentation UI. The `ScalarConfig` struct gives you control over colors, layout, and dark mode — either through predefined themes or custom CSS.
+Open-swag-go uses [Scalar](https://github.com/scalar/scalar) to render your API documentation UI. The `UIConfig` struct (the `UI` field on `Config`) controls colors, layout, dark mode, and custom CSS — either through predefined themes or your own styles.
 
-## ScalarConfig
+## UIConfig
 
-Pass a `ScalarConfig` to your `Config` to customize the documentation UI:
+Set the `UI` field on your `Config` to customize the documentation UI:
 
-```go title="scalar_config.go"
-type ScalarConfig struct {
-	Theme       string // Predefined theme name
-	DarkMode    bool   // Enable dark mode by default
-	CustomCSS   string // Additional CSS to inject
-	HideModels  bool   // Hide the models/schemas section
-	HideSidebar bool   // Hide the sidebar navigation
+```go title="ui_config.go"
+type UIConfig struct {
+	Theme              string // Predefined theme: "purple", "blue", "green", "light"
+	DarkMode           bool   // Enable dark mode by default
+	Layout             string // Layout style, e.g. "modern"
+	ShowSidebar        bool   // Show the navigation sidebar
+	SidebarSearch      bool   // Enable the sidebar search box
+	TagGrouping        bool   // Group endpoints by tag
+	CollapsibleSchemas bool   // Render schemas as collapsible sections
+	CustomCSS          string // Additional CSS to inject
 }
 ```
 
 ### Basic usage
 
 ```go title="theming_basic.go"
-docs := openswag.Config{
-	Title:   "My API",
-	Version: "1.0.0",
-	UIConfig: openswag.UIConfig{
-		Scalar: &openswag.ScalarConfig{
-			Theme:    "purple",
-			DarkMode: true,
-		},
+cfg := openswag.Config{
+	Info: openswag.Info{
+		Title:   "My API",
+		Version: "1.0.0",
+	},
+	UI: openswag.UIConfig{
+		Theme:    "purple",
+		DarkMode: true,
 	},
 }
 ```
@@ -48,17 +51,7 @@ Open-swag-go ships with four built-in themes:
 | `light` | Minimal light theme with neutral tones |
 
 ```go title="theme_selection.go"
-// Purple (default)
-scalar := openswag.ScalarConfig{Theme: "purple"}
-
-// Blue
-scalar = openswag.ScalarConfig{Theme: "blue"}
-
-// Green
-scalar = openswag.ScalarConfig{Theme: "green"}
-
-// Light
-scalar = openswag.ScalarConfig{Theme: "light"}
+ui := openswag.UIConfig{Theme: "purple"} // or "blue", "green", "light"
 ```
 
 ## Dark Mode
@@ -66,14 +59,14 @@ scalar = openswag.ScalarConfig{Theme: "light"}
 Enable dark mode by default so the docs render with a dark background on first load:
 
 ```go title="dark_mode.go"
-docs := openswag.Config{
-	Title:   "My API",
-	Version: "1.0.0",
-	UIConfig: openswag.UIConfig{
-		Scalar: &openswag.ScalarConfig{
-			Theme:    "blue",
-			DarkMode: true,
-		},
+cfg := openswag.Config{
+	Info: openswag.Info{
+		Title:   "My API",
+		Version: "1.0.0",
+	},
+	UI: openswag.UIConfig{
+		Theme:    "blue",
+		DarkMode: true,
 	},
 }
 ```
@@ -85,22 +78,22 @@ When `DarkMode` is `true`, the Scalar UI loads in dark mode. Users can still tog
 Inject your own CSS to override colors, fonts, or layout details:
 
 ```go title="custom_css.go"
-docs := openswag.Config{
-	Title:   "My API",
-	Version: "1.0.0",
-	UIConfig: openswag.UIConfig{
-		Scalar: &openswag.ScalarConfig{
-			Theme: "purple",
-			CustomCSS: `
-				:root {
-					--scalar-color-1: #e91e63;
-					--scalar-color-accent: #e91e63;
-				}
-				.scalar-app {
-					font-family: "Inter", sans-serif;
-				}
-			`,
-		},
+cfg := openswag.Config{
+	Info: openswag.Info{
+		Title:   "My API",
+		Version: "1.0.0",
+	},
+	UI: openswag.UIConfig{
+		Theme: "purple",
+		CustomCSS: `
+			:root {
+				--scalar-color-1: #e91e63;
+				--scalar-color-accent: #e91e63;
+			}
+			.scalar-app {
+				font-family: "Inter", sans-serif;
+			}
+		`,
 	},
 }
 ```
@@ -114,15 +107,16 @@ Common CSS variables you can override:
 | `--scalar-color-background-1` | Main background |
 | `--scalar-color-background-2` | Sidebar / secondary background |
 
-## Hiding UI Sections
+## Layout and Sidebar Options
 
-You can hide parts of the UI to simplify the docs:
-
-```go title="hide_sections.go"
-scalar := openswag.ScalarConfig{
-	Theme:       "blue",
-	HideModels:  true, // Remove the schemas section
-	HideSidebar: true, // Remove sidebar navigation
+```go title="layout_options.go"
+ui := openswag.UIConfig{
+	Theme:              "blue",
+	Layout:             "modern",
+	ShowSidebar:        true,
+	SidebarSearch:      true,
+	TagGrouping:        true,
+	CollapsibleSchemas: true,
 }
 ```
 
@@ -141,26 +135,26 @@ import (
 )
 
 func main() {
-	docs := openswag.Config{
-		Title:       "Acme API",
-		Version:     "2.0.0",
-		Description: "The Acme Corp public API",
-		UIConfig: openswag.UIConfig{
-			Scalar: &openswag.ScalarConfig{
-				Theme:    "blue",
-				DarkMode: true,
-				CustomCSS: `
-					:root {
-						--scalar-color-1: #0066ff;
-						--scalar-color-accent: #0066ff;
-					}
-				`,
-			},
+	docs := openswag.New(openswag.Config{
+		Info: openswag.Info{
+			Title:       "Acme API",
+			Version:     "2.0.0",
+			Description: "The Acme Corp public API",
 		},
-	}
+		UI: openswag.UIConfig{
+			Theme:    "blue",
+			DarkMode: true,
+			CustomCSS: `
+				:root {
+					--scalar-color-1: #0066ff;
+					--scalar-color-accent: #0066ff;
+				}
+			`,
+		},
+	})
 
 	mux := http.NewServeMux()
-	adapter.Mount(mux, docs)
+	adapter.Mount(mux, docs, "/docs")
 
 	http.ListenAndServe(":8080", mux)
 }

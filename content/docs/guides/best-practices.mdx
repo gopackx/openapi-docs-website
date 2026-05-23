@@ -9,8 +9,10 @@ Never expose internal API documentation publicly in production. Use `DocsAuth` t
 
 ```go title="main.go"
 docs := openswag.New(openswag.Config{
-    Title:   "Internal API",
-    Version: "1.0.0",
+    Info: openswag.Info{
+    	Title:   "Internal API",
+    	Version: "1.0.0",
+    },
     DocsAuth: &openswag.DocsAuth{
         Type:     "basic",
         Username: os.Getenv("DOCS_USER"),
@@ -62,9 +64,11 @@ If your API and documentation are on different origins, the try-it console needs
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:   "My API",
-    Version: "1.0.0",
-    UIConfig: openswag.UIConfig{
+    Info: openswag.Info{
+    	Title:   "My API",
+    	Version: "1.0.0",
+    },
+    UI: openswag.UIConfig{
         CORSProxyURL: "https://cors-proxy.internal.example.com",
     },
 })
@@ -83,8 +87,10 @@ For machine-to-machine access to your docs, use API key authentication:
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:   "Partner API",
-    Version: "1.0.0",
+    Info: openswag.Info{
+    	Title:   "Partner API",
+    	Version: "1.0.0",
+    },
     DocsAuth: &openswag.DocsAuth{
         Type:      "apikey",
         HeaderName: "X-Docs-Key",

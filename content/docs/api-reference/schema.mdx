@@ -40,10 +40,10 @@ type Schema struct {
 }
 ```
 
-### Generate
+### FromType
 
 ```go
-func Generate(v interface{}) *Schema
+func FromType(v interface{}) *Schema
 ```
 
 Accepts any Go value (typically a struct) and returns its OpenAPI schema. Nested structs, slices, maps, and pointers are resolved recursively. Embedded (anonymous) struct fields are promoted into the parent schema (v1.1.0+).
@@ -55,7 +55,7 @@ type User struct {
     Email string `json:"email" description:"Email address"     format:"email"`
 }
 
-s := schema.Generate(User{})
+s := schema.FromType(User{})
 // s.Type == "object"
 // s.Properties["id"].Type == "integer"
 // s.Properties["id"].Format == "int64"
@@ -77,7 +77,7 @@ type User struct {
     Name string `json:"name"`
 }
 
-s := schema.Generate(User{})
+s := schema.FromType(User{})
 // s.Properties has: "id", "name", "created_at", "updated_at"
 // Timestamps fields are promoted into User's schema
 ```
@@ -97,36 +97,37 @@ func NewValidator() *Validator
 ### Methods
 
 ```go
-func (v *Validator) Validate(value interface{}, s *Schema) []ValidationError
+func (v *Validator) ValidateValue(value interface{}, schema *Schema) []ValidationError
 ```
 
-Returns a slice of validation errors. An empty slice means the value is valid. Empty schemas (from `interface{}`/`any` fields) accept any value (v1.1.0+).
+Validates a Go value against a schema. Returns a slice of validation errors; an empty slice means the value is valid. Empty schemas (from `interface{}`/`any` fields) accept any value (v1.1.0+).
 
 ```go
-func (v *Validator) ValidateJSON(data []byte, s *Schema) []ValidationError
+func (v *Validator) Validate(schema *Schema) []ValidationError
 ```
 
-Validates raw JSON bytes against a schema.
+Validates that a schema itself is internally consistent.
 
 ### ValidationError
 
 ```go
 type ValidationError struct {
-    Field   string // JSON path to the invalid field, e.g. "user.email"
+    Path    string // JSON path to the invalid field, e.g. "user.email"
     Message string // Human-readable error message
-    Code    string // Machine-readable code: "required", "format", "type", "enum"
 }
+
+func (e ValidationError) Error() string
 ```
 
 ### Usage
 
 ```go
 validator := schema.NewValidator()
-s := schema.Generate(User{})
+s := schema.FromType(User{})
 
-errs := validator.ValidateJSON([]byte(`{"name": "Alice"}`), s)
+errs := validator.ValidateValue(User{Name: "Alice"}, s)
 for _, e := range errs {
-    fmt.Printf("%s: %s\n", e.Field, e.Message)
+    fmt.Printf("%s: %s\n", e.Path, e.Message)
 }
 ```
 
@@ -166,25 +167,15 @@ The schema generator reads the following struct tags to enrich the generated sch
 | `binding` | Gin-style binding rules | `binding:"required"` |
 | `enum` | Allowed values (comma-separated) | `enum:"active,inactive,banned"` |
 
-### ParseTags
+### ParseFieldTags / IsRequired
 
 ```go
-func ParseTags(field reflect.StructField) TagInfo
+func ParseFieldTags(field reflect.StructField, schema *Schema)
+func IsRequired(field reflect.StructField) bool
+func GetTypeMapping(goType string) *Schema
 ```
 
-Extracts all recognised tags from a struct field.
-
-```go
-type TagInfo struct {
-    Name        string   // JSON field name
-    Description string   // From description tag
-    Example     string   // From example tag
-    Format      string   // From format tag
-    Required    bool     // From swagger:"required" or validate:"required"
-    OmitEmpty   bool     // From json:",omitempty"
-    Enum        []string // From enum tag
-}
-```
+`ParseFieldTags` reads the recognised tags from a struct field and applies them onto the given `*Schema` (description, example, format, and `swagger` sub-keys). `IsRequired` reports whether a field is required, reading `swagger:"required"`, `validate:"required"`, or `binding:"required"`. `GetTypeMapping` returns the base schema for a Go type name.
 
 ### Omitempty and Required Interaction (v1.1.0+)
 
@@ -207,7 +198,7 @@ type Product struct {
     Status string  `json:"status" description:"Availability" enum:"active,discontinued"`
 }
 
-s := schema.Generate(Product{})
+s := schema.FromType(Product{})
 // s.Properties["status"].Enum == ["active", "discontinued"]
 // s.Properties["price"].Format == "double"
 // s.Required == ["name"]
@@ -232,7 +223,7 @@ type CreateOrderRequest struct {
 }
 
 func main() {
-    s := schema.Generate(CreateOrderRequest{})
+    s := schema.FromType(CreateOrderRequest{})
     data, _ := json.MarshalIndent(s, "", "  ")
     fmt.Println(string(data))
 }

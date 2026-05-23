@@ -9,8 +9,10 @@ By default, open-swag-go generates the OpenAPI spec on every request. In product
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:   "My API",
-    Version: "1.0.0",
+    Info: openswag.Info{
+    	Title:   "My API",
+    	Version: "1.0.0",
+    },
     Cache:   true, // Cache the generated spec in memory
 })
 ```
@@ -33,19 +35,20 @@ import (
 
 func main() {
     docs := openswag.New(openswag.Config{
-        Title:   "My API",
-        Version: "1.0.0",
+        Info: openswag.Info{
+        	Title:   "My API",
+        	Version: "1.0.0",
+        },
     })
 
     // Register all your endpoints
-    docs.AddEndpoint(/* ... */)
+    docs.Add(/* ... */)
 
-    spec, err := docs.GenerateSpec()
+    data, err := docs.SpecJSON()
     if err != nil {
         panic(err)
     }
 
-    data, _ := json.MarshalIndent(spec, "", "  ")
     os.WriteFile("openapi.json", data, 0644)
 }
 ```
@@ -54,8 +57,10 @@ Then serve the static file:
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:      "My API",
-    Version:    "1.0.0",
+    Info: openswag.Info{
+    	Title:      "My API",
+    	Version:    "1.0.0",
+    },
     StaticSpec: "openapi.json", // Serve from file instead of generating
 })
 ```
@@ -72,9 +77,11 @@ Serve the Scalar UI assets and the OpenAPI spec through a CDN for faster load ti
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:   "My API",
-    Version: "1.0.0",
-    UIConfig: openswag.UIConfig{
+    Info: openswag.Info{
+    	Title:   "My API",
+    	Version: "1.0.0",
+    },
+    UI: openswag.UIConfig{
         SpecURL: "https://cdn.example.com/api/openapi.json",
     },
 })
@@ -96,7 +103,7 @@ Cache-Control: public, max-age=3600, s-maxage=86400
 Only register endpoints that should be documented. Use build tags or configuration to exclude internal/debug endpoints from production docs.
 
 ```go
-docs.AddEndpoint(openswag.Endpoint{
+docs.Add(openswag.Endpoint{
     Method:      "GET",
     Path:        "/api/users",
     Summary:     "List users",
@@ -106,7 +113,7 @@ docs.AddEndpoint(openswag.Endpoint{
 
 // Don't register debug endpoints in production docs
 if os.Getenv("INCLUDE_DEBUG_DOCS") == "true" {
-    docs.AddEndpoint(openswag.Endpoint{
+    docs.Add(openswag.Endpoint{
         Method:  "GET",
         Path:    "/debug/pprof",
         Summary: "Profiling endpoint",

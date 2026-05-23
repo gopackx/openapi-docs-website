@@ -51,20 +51,21 @@ import (
 
 func main() {
     docs := openswag.New(openswag.Config{
-        Title:   "My API",
-        Version: os.Getenv("API_VERSION"),
+        Info: openswag.Info{
+        	Title:   "My API",
+        	Version: os.Getenv("API_VERSION"),
+        },
     })
 
     // Register endpoints (import from your app)
     registerEndpoints(docs)
 
-    spec, err := docs.GenerateSpec()
+    data, err := docs.SpecJSON()
     if err != nil {
         fmt.Fprintf(os.Stderr, "Failed to generate spec: %v\n", err)
         os.Exit(1)
     }
 
-    data, _ := json.MarshalIndent(spec, "", "  ")
     if err := os.WriteFile("openapi.json", data, 0644); err != nil {
         fmt.Fprintf(os.Stderr, "Failed to write spec: %v\n", err)
         os.Exit(1)

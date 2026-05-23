@@ -67,19 +67,20 @@ import (
 
 func main() {
     docs := openswag.New(openswag.Config{
-        Title:   "My API",
-        Version: "1.0.0",
+        Info: openswag.Info{
+        	Title:   "My API",
+        	Version: "1.0.0",
+        },
     })
 
     // Register your endpoints
     registerEndpoints(docs)
 
-    spec, err := docs.GenerateSpec()
+    data, err := docs.SpecJSON()
     if err != nil {
         panic(err)
     }
 
-    data, _ := json.MarshalIndent(spec, "", "  ")
     os.WriteFile("openapi.json", data, 0644)
 }
 ```

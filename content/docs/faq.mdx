@@ -31,8 +31,10 @@ The adapters are included in the same module, so `go get` pulls them all in — 
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:   "My API",
-    Version: "1.0.0",
+    Info: openswag.Info{
+    	Title:   "My API",
+    	Version: "1.0.0",
+    },
 })
 ```
 
@@ -43,7 +45,7 @@ Then mount it on your router and add endpoints.
 Yes, pass the path when mounting:
 
 ```go
-chiadapter.Mount(r, "/api-docs", docs)
+chiadapter.Mount(r, docs, "/api-docs")
 ```
 
 ### How do I change the UI theme?
@@ -52,9 +54,11 @@ Set the `Theme` field in `UIConfig`:
 
 ```go
 docs := openswag.New(openswag.Config{
-    Title:   "My API",
-    Version: "1.0.0",
-    UIConfig: openswag.UIConfig{
+    Info: openswag.Info{
+    	Title:   "My API",
+    	Version: "1.0.0",
+    },
+    UI: openswag.UIConfig{
         Theme:    "blue",
         DarkMode: true,
     },
@@ -65,14 +69,22 @@ Available themes: `purple`, `blue`, `green`, `light`.
 
 ### Can I use multiple authentication schemes?
 
-Yes. Pass multiple schemes to `SecuritySchemes`:
+Yes. Reference each scheme by name in an endpoint's `Security`, then register the schemes on the built spec:
 
 ```go
-docs := openswag.New(openswag.Config{
-    SecuritySchemes: []auth.Scheme{
-        auth.BearerAuth("jwt", "JWT Authentication"),
-        auth.APIKeyAuth("api-key", "API Key", "X-API-Key", "header"),
-    },
+docs.Add(openswag.Endpoint{
+    Method:   "GET",
+    Path:     "/users/me",
+    Security: []string{openswag.SecurityBearerAuth, openswag.SecurityApiKey},
+    // ...
+})
+
+openapi := docs.BuildSpec()
+openapi.AddSecurityScheme("bearerAuth", &spec.SecurityScheme{
+    Type: "http", Scheme: "bearer", BearerFormat: "JWT",
+})
+openapi.AddSecurityScheme("apiKeyAuth", &spec.SecurityScheme{
+    Type: "apiKey", Name: "X-API-Key", In: "header",
 })
 ```
 
@@ -88,24 +100,26 @@ go get github.com/gopackx/open-swag-go@v1.1.1
 
 ### How do I add an endpoint?
 
-Use `docs.AddEndpoint()` with an `Endpoint` struct:
+Use `docs.Add()` with an `Endpoint` struct (or `docs.AddAll(...)` for several):
 
 ```go
-docs.AddEndpoint(openswag.Endpoint{
+docs.Add(openswag.Endpoint{
     Method:  "GET",
     Path:    "/api/users",
     Summary: "List users",
     Tags:    []string{"Users"},
+    Responses: map[int]openswag.Response{
+        200: {Description: "User list"},
+    },
 })
 ```
 
 ### Can I generate the spec without running a server?
 
-Yes. Use `docs.GenerateSpec()` to get the spec as a Go struct, then marshal it to JSON:
+Yes. Use `docs.SpecJSON()` to get the spec as JSON bytes:
 
 ```go
-spec, _ := docs.GenerateSpec()
-data, _ := json.MarshalIndent(spec, "", "  ")
+data, _ := docs.SpecJSON()
 os.WriteFile("openapi.json", data, 0644)
 ```
 
@@ -120,12 +134,12 @@ Yes. Use the `net/http` adapter, which works with any framework that supports `h
 ```go
 import nethttpadapter "github.com/gopackx/open-swag-go/adapters/nethttp"
 
-nethttpadapter.Mount(mux, "/docs", docs)
+nethttpadapter.Mount(mux, docs, "/docs")
 ```
 
 ### How do I hide certain endpoints from the docs?
 
-Only endpoints you explicitly register with `docs.AddEndpoint()` appear in the spec. If you don't register an endpoint, it won't be documented.
+Only endpoints you explicitly register with `docs.Add()` (or `docs.AddAll()`) appear in the spec. If you don't register an endpoint, it won't be documented.
 
 ### Can I generate TypeScript types from my spec?
 

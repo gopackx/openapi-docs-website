@@ -16,9 +16,7 @@ import "github.com/gopackx/open-swag-go/pkg/versioning"
 Compares two OpenAPI specs and produces a structured diff.
 
 ```go
-type Differ struct {
-    // unexported fields
-}
+type Differ struct{}
 
 func NewDiffer() *Differ
 ```
@@ -26,29 +24,24 @@ func NewDiffer() *Differ
 ### Methods
 
 ```go
-func (d *Differ) Diff(old, new []byte) (*Diff, error)
+func (d *Differ) Compare(oldSpec, newSpec map[string]interface{}) (*Diff, error)
+func (d *Differ) CompareFiles(oldPath, newPath string) (*Diff, error)
 ```
 
-Accepts two JSON-encoded OpenAPI specs and returns a `Diff` describing every change. Returns an error if either spec is malformed.
-
-```go
-func (d *Differ) DiffFromFiles(oldPath, newPath string) (*Diff, error)
-```
-
-Convenience wrapper that reads specs from file paths before diffing.
+`Compare` takes two decoded OpenAPI specs (e.g. from `json.Unmarshal` into a `map[string]interface{}`). `CompareFiles` reads and decodes two spec files first.
 
 ### Usage
 
 ```go
 differ := versioning.NewDiffer()
 
-diff, err := differ.Diff(oldSpec, newSpec)
+diff, err := differ.CompareFiles("spec-v1.json", "spec-v2.json")
 if err != nil {
     log.Fatal(err)
 }
 
 fmt.Printf("Total changes: %d\n", len(diff.Changes))
-fmt.Printf("Breaking: %d\n", len(diff.BreakingChanges))
+fmt.Printf("Breaking: %d\n", len(diff.Breaking))
 ```
 
 ## Diff
@@ -57,9 +50,24 @@ The result of comparing two specs.
 
 ```go
 type Diff struct {
-    Changes         []Change         // All detected changes
-    BreakingChanges []BreakingChange // Subset of changes that are breaking
-    Summary         string           // Human-readable summary
+    OldVersion string           // Version of the old spec
+    NewVersion string           // Version of the new spec
+    Changes    []Change         // All detected changes
+    Breaking   []BreakingChange // Subset of changes that are breaking
+    Summary    Summary          // Aggregate counts
+}
+
+func (d *Diff) HasBreakingChanges() bool
+```
+
+## Summary
+
+```go
+type Summary struct {
+    AddedEndpoints    int
+    RemovedEndpoints  int
+    ModifiedEndpoints int
+    BreakingChanges   int
 }
 ```
 
@@ -70,13 +78,14 @@ A single difference between two spec versions.
 ```go
 type Change struct {
     Type        ChangeType // added, removed, modified
-    Path        string     // JSON pointer to the changed element, e.g. "/paths/~1users/get"
-    Description string     // Human-readable description of the change
-    Breaking    bool       // Whether this change is breaking
+    Path        string     // API path, e.g. "/users/{id}"
+    Method      string     // HTTP method (when applicable)
+    Description string     // Human-readable description
+    IsBreaking  bool       // Whether this change is breaking
 }
 ```
 
-### ChangeType Constants
+### ChangeType constants
 
 ```go
 type ChangeType string
@@ -94,112 +103,100 @@ A change that may break existing API consumers.
 
 ```go
 type BreakingChange struct {
-    Change                        // Embeds Change
-    Severity    Severity          // low, medium, high
-    Migration   string            // Suggested migration step
+    Path      string // API path
+    Method    string // HTTP method
+    Reason    string // Why the change is breaking
+    Migration string // Suggested migration step
 }
 ```
 
-### Severity Constants
+## Breaking change rules
 
 ```go
-type Severity string
+type BreakingChangeType string
 
 const (
-    SeverityLow    Severity = "low"
-    SeverityMedium Severity = "medium"
-    SeverityHigh   Severity = "high"
+    BreakingEndpointRemoved    BreakingChangeType = "endpoint_removed"
+    BreakingParameterRemoved   BreakingChangeType = "parameter_removed"
+    BreakingRequiredAdded      BreakingChangeType = "required_field_added"
+    BreakingResponseRemoved    BreakingChangeType = "response_removed"
+    BreakingTypeChanged        BreakingChangeType = "type_changed"
+    BreakingRequestBodyRemoved BreakingChangeType = "request_body_removed"
+    BreakingSecurityAdded      BreakingChangeType = "security_added"
 )
+
+type BreakingChangeRule struct {
+    Type        BreakingChangeType
+    Description string
+    Severity    string // "error" or "warning"
+}
+
+func DefaultBreakingRules() []BreakingChangeRule
+func IsBreaking(changeType BreakingChangeType) bool
 ```
-
-Breaking changes are classified by severity:
-
-| Severity | Examples |
-|----------|----------|
-| High | Endpoint removed, required parameter added, response schema field removed |
-| Medium | Parameter type changed, response status code changed |
-| Low | Description changed, example updated, optional field added |
 
 ## ChangelogGenerator
 
-Produces a human-readable changelog from a `Diff`.
+Produces a structured changelog from a `Diff`.
 
 ```go
-type ChangelogGenerator struct {
-    // unexported fields
-}
+type ChangelogGenerator struct{}
 
 func NewChangelogGenerator() *ChangelogGenerator
+func (g *ChangelogGenerator) Generate(diff *Diff) *ChangelogEntry
+
+type ChangelogEntry struct {
+    Version  string
+    Date     time.Time
+    Added    []string
+    Changed  []string
+    Removed  []string
+    Fixed    []string
+    Breaking []string
+}
+
+func (e *ChangelogEntry) ToMarkdown() string
+
+// Convenience: build a Markdown changelog in one call.
+func GenerateChangelog(diff *Diff) string
 ```
-
-### Methods
-
-```go
-func (g *ChangelogGenerator) Generate(diff *Diff) string
-```
-
-Returns a Markdown-formatted changelog string.
-
-```go
-func (g *ChangelogGenerator) GenerateToFile(diff *Diff, path string) error
-```
-
-Writes the changelog to a file.
 
 ### Usage
 
 ```go
-gen := versioning.NewChangelogGenerator()
-changelog := gen.Generate(diff)
-fmt.Println(changelog)
-```
+entry := versioning.NewChangelogGenerator().Generate(diff)
+fmt.Println(entry.ToMarkdown())
 
-Output:
-
-```markdown
-## Changelog
-
-### Breaking Changes
-- **DELETE** `/users/{id}` — Endpoint removed (high severity)
-- **PUT** `/users/{id}` — Required field `email` added to request body (medium severity)
-
-### Non-Breaking Changes
-- **POST** `/users` — Added optional `nickname` field to request body
-- **GET** `/products` — New `category` query parameter
+// or, in one step:
+fmt.Println(versioning.GenerateChangelog(diff))
 ```
 
 ## MigrationGenerator
 
-Produces step-by-step migration instructions from breaking changes.
+Produces a step-by-step migration guide from breaking changes.
 
 ```go
-type MigrationGenerator struct {
-    // unexported fields
-}
+type MigrationGenerator struct{}
 
 func NewMigrationGenerator() *MigrationGenerator
-```
+func (g *MigrationGenerator) Generate(diff *Diff) *MigrationGuide
 
-### Methods
+type MigrationGuide struct {
+    FromVersion string
+    ToVersion   string
+    Steps       []MigrationStep
+}
 
-```go
-func (g *MigrationGenerator) Generate(diff *Diff) string
-```
+func (g *MigrationGuide) ToMarkdown() string
 
-Returns a Markdown-formatted migration guide covering only breaking changes.
-
-```go
-func (g *MigrationGenerator) GenerateToFile(diff *Diff, path string) error
-```
-
-Writes the migration guide to a file.
-
-### Usage
-
-```go
-mgen := versioning.NewMigrationGenerator()
-guide := mgen.Generate(diff)
-fmt.Println(guide)
+type MigrationStep struct {
+    Title       string
+    Description string
+    Before      string
+    After       string
+    Endpoint    string
+    Method      string
+}
 ```
 
 ## Quick Example
@@ -216,24 +213,19 @@ import (
 )
 
 func main() {
-    oldSpec, _ := os.ReadFile("spec-v1.json")
-    newSpec, _ := os.ReadFile("spec-v2.json")
-
     differ := versioning.NewDiffer()
-    diff, err := differ.Diff(oldSpec, newSpec)
+    diff, err := differ.CompareFiles("spec-v1.json", "spec-v2.json")
     if err != nil {
         log.Fatal(err)
     }
 
-    fmt.Printf("Changes: %d, Breaking: %d\n",
-        len(diff.Changes), len(diff.BreakingChanges))
+    fmt.Printf("Changes: %d, Breaking: %d\n", len(diff.Changes), len(diff.Breaking))
 
-    changelog := versioning.NewChangelogGenerator().Generate(diff)
-    fmt.Println(changelog)
+    fmt.Println(versioning.GenerateChangelog(diff))
 
-    if len(diff.BreakingChanges) > 0 {
+    if diff.HasBreakingChanges() {
         guide := versioning.NewMigrationGenerator().Generate(diff)
-        os.WriteFile("MIGRATION.md", []byte(guide), 0644)
+        os.WriteFile("MIGRATION.md", []byte(guide.ToMarkdown()), 0644)
     }
 }
 ```

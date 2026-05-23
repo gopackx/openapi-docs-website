@@ -1,11 +1,11 @@
 ---
 title: Auth Package
-description: API reference for pkg/auth — security schemes, playground configuration, and credential storage.
+description: API reference for pkg/auth — security schemes, playground configuration, and credential persistence.
 ---
 
 # Auth Package
 
-`pkg/auth` provides types for defining OpenAPI security schemes, configuring the interactive authentication playground, and managing credential persistence.
+`pkg/auth` provides types for defining OpenAPI security schemes, configuring the interactive authentication playground, and persisting credentials.
 
 ```go
 import "github.com/gopackx/open-swag-go/pkg/auth"
@@ -17,86 +17,97 @@ Represents a single OpenAPI security scheme.
 
 ```go
 type Scheme struct {
-    Name        string     // Unique scheme identifier, e.g. "bearerAuth"
-    Type        SchemeType // bearer, basic, apiKey, cookie, oauth2
-    Description string     // Human-readable description
-    In          string     // Location for apiKey: "header", "query", or "cookie"
-    FieldName   string     // Header/query/cookie name for apiKey schemes
-    BearerFormat string    // Token format hint, e.g. "JWT"
-    Flows       *OAuthFlows // OAuth2 flow definitions (oauth2 type only)
+    Type             SchemeType     // "http", "apiKey", "oauth2", "openIdConnect"
+    Description      string         // Human-readable description
+    Name             string         // Header/query/cookie name (apiKey schemes)
+    In               APIKeyLocation // "header", "query", or "cookie" (apiKey schemes)
+    Scheme           string         // "bearer" or "basic" (http schemes)
+    BearerFormat     string         // Token format hint, e.g. "JWT"
+    Flows            *OAuthFlows    // OAuth2 flow definitions (oauth2 type)
+    OpenIDConnectURL string         // Discovery URL (openIdConnect type)
 }
 ```
 
-### SchemeType Constants
+### SchemeType constants
 
 ```go
 type SchemeType string
 
 const (
-    SchemeBearer SchemeType = "bearer"
-    SchemeBasic  SchemeType = "basic"
-    SchemeAPIKey SchemeType = "apiKey"
-    SchemeCookie SchemeType = "cookie"
-    SchemeOAuth2 SchemeType = "oauth2"
+    SchemeTypeHTTP   SchemeType = "http"
+    SchemeTypeAPIKey SchemeType = "apiKey"
+    SchemeTypeOAuth2 SchemeType = "oauth2"
+    SchemeTypeOpenID SchemeType = "openIdConnect"
+)
+```
+
+### APIKeyLocation constants
+
+```go
+type APIKeyLocation string
+
+const (
+    APIKeyInHeader APIKeyLocation = "header"
+    APIKeyInQuery  APIKeyLocation = "query"
+    APIKeyInCookie APIKeyLocation = "cookie"
 )
 ```
 
 ### Constructors
 
 ```go
-func BearerAuth() Scheme
+func BearerAuth(description string) Scheme
+func BasicAuth(description string) Scheme
+func APIKeyAuth(name string, in APIKeyLocation, description string) Scheme
+func APIKeyHeader(name, description string) Scheme
+func APIKeyQuery(name, description string) Scheme
+func CookieAuth(name, description string) Scheme
 ```
 
-Returns a pre-configured Bearer token scheme with `BearerFormat: "JWT"`.
+- `BearerAuth` returns an HTTP scheme with `Scheme: "bearer"` and `BearerFormat: "JWT"`.
+- `BasicAuth` returns an HTTP scheme with `Scheme: "basic"`.
+- `APIKeyAuth` returns an API-key scheme; `APIKeyHeader` / `APIKeyQuery` are shorthands. `CookieAuth` is an API-key scheme located in a cookie.
 
 ```go
-func BasicAuth() Scheme
+bearer := auth.BearerAuth("JWT authentication")
+apiKey := auth.APIKeyHeader("X-API-Key", "API key authentication")
 ```
 
-Returns a pre-configured HTTP Basic authentication scheme.
+## Applying schemes to endpoints
+
+You don't assign schemes on `Config`. Instead, reference a scheme name in `Endpoint.Security`, and the matching security scheme is generated automatically when the spec is built. Predefined names are exported from the root package:
 
 ```go
-func APIKeyAuth(name, in string) Scheme
-```
-
-Returns an API key scheme. `name` is the header/query parameter name, `in` is `"header"` or `"query"`.
-
-```go
-func CookieAuth(cookieName string) Scheme
-```
-
-Returns a cookie-based authentication scheme.
-
-```go
-func OAuth2(flows *OAuthFlows) Scheme
-```
-
-Returns an OAuth2 scheme with the given flow configuration.
-
-### Usage
-
-```go
-schemes := []auth.Scheme{
-    auth.BearerAuth(),
-    auth.APIKeyAuth("X-API-Key", "header"),
-}
-
-cfg := openswag.Config{
+openswag.Endpoint{
+    Method:   "GET",
+    Path:     "/me",
+    Security: []string{openswag.SecurityBearerAuth}, // "bearerAuth"
     // ...
-    Security: schemes,
 }
+```
+
+To register a custom scheme explicitly, build the spec and add it:
+
+```go
+openapi := docs.BuildSpec()
+openapi.AddSecurityScheme("bearerAuth", &spec.SecurityScheme{
+    Type:         "http",
+    Scheme:       "bearer",
+    BearerFormat: "JWT",
+    Description:  auth.BearerAuth("JWT authentication").Description,
+})
 ```
 
 ## OAuthFlows
 
-Defines OAuth2 flow configurations.
+Defines OAuth2 flow configurations for an `oauth2` scheme.
 
 ```go
 type OAuthFlows struct {
-    AuthorizationCode *OAuthFlow
-    ClientCredentials *OAuthFlow
     Implicit          *OAuthFlow
     Password          *OAuthFlow
+    ClientCredentials *OAuthFlow
+    AuthorizationCode *OAuthFlow
 }
 
 type OAuthFlow struct {
@@ -109,82 +120,55 @@ type OAuthFlow struct {
 
 ## PlaygroundConfig
 
-Configures the interactive authentication playground in the docs UI. Users can enter credentials and test authenticated endpoints directly.
+Configures the interactive authentication playground in the docs UI.
 
 ```go
 type PlaygroundConfig struct {
-    Enabled            bool              // Enable the auth playground
-    PersistCredentials bool              // Remember credentials across sessions
+    Enabled            bool              // Enable the playground
     DefaultScheme      string            // Pre-selected scheme name
-    Store              CredentialStore   // Storage backend for credentials
+    PersistCredentials bool              // Remember credentials across sessions
+    Schemes            map[string]Scheme // Schemes available in the playground
+    PrefilledValues    map[string]string // Pre-filled values keyed by scheme
 }
 ```
 
-### Functional Options
+### Constructor and options
 
 ```go
-func WithPlayground(opts ...PlaygroundOption) PlaygroundConfig
-```
+func NewPlayground(opts ...PlaygroundOption) *PlaygroundConfig
 
-```go
-func EnablePersistence() PlaygroundOption
-```
-
-Enables credential persistence across browser sessions using localStorage.
-
-```go
+func WithScheme(name string, scheme Scheme) PlaygroundOption
 func WithDefaultScheme(name string) PlaygroundOption
+func WithPersistence(enabled bool) PlaygroundOption
+func WithPrefilledValue(key, value string) PlaygroundOption
+func Disable() PlaygroundOption
 ```
 
-Sets the initially selected authentication scheme.
+`NewPlayground` defaults to `Enabled: true` and `PersistCredentials: true`.
 
 ```go
-func WithStore(store CredentialStore) PlaygroundOption
-```
-
-Provides a custom credential storage backend.
-
-### Usage
-
-```go
-playground := auth.WithPlayground(
-    auth.EnablePersistence(),
+playground := auth.NewPlayground(
+    auth.WithScheme("bearerAuth", auth.BearerAuth("JWT authentication")),
     auth.WithDefaultScheme("bearerAuth"),
+    auth.WithPersistence(true),
 )
-
-cfg := openswag.Config{
-    // ...
-    AuthPlayground: playground,
-}
 ```
 
 ## CredentialStore
 
-Interface for persisting user-entered credentials.
+Persists user-entered credentials. `CredentialStore` is a struct created with `NewCredentialStore`.
 
 ```go
-type CredentialStore interface {
-    Get(scheme string) (string, error)
-    Set(scheme string, value string) error
-    Delete(scheme string) error
-}
+func NewCredentialStore(config PersistConfig) *CredentialStore
+
+func (s *CredentialStore) Set(scheme, value string)
+func (s *CredentialStore) Get(scheme string) (string, bool)
+func (s *CredentialStore) Delete(scheme string)
+func (s *CredentialStore) Clear()
+func (s *CredentialStore) ToJSON() (string, error)
+func (s *CredentialStore) FromJSON(data string) error
+func (s *CredentialStore) GetConfig() PersistConfig
 ```
-
-The default implementation uses the browser's `localStorage`. You can provide a custom store for server-side persistence or encrypted storage.
-
-### Built-in Stores
-
-```go
-func NewLocalStore() CredentialStore
-```
-
-Returns the default localStorage-backed store.
-
-```go
-func NewMemoryStore() CredentialStore
-```
-
-Returns an in-memory store that does not persist across page reloads. Useful for testing or high-security environments.
 
 ## Quick Example
 
@@ -193,38 +177,39 @@ package main
 
 import (
     "net/http"
+
     openswag "github.com/gopackx/open-swag-go"
     "github.com/gopackx/open-swag-go/pkg/auth"
+    "github.com/gopackx/open-swag-go/pkg/spec"
 )
 
 func main() {
-    cfg := openswag.Config{
+    docs := openswag.New(openswag.Config{
         Info: openswag.Info{Title: "Secure API", Version: "1.0.0"},
-        Security: []auth.Scheme{
-            auth.BearerAuth(),
-            auth.APIKeyAuth("X-API-Key", "header"),
-        },
-        AuthPlayground: auth.WithPlayground(
-            auth.EnablePersistence(),
-            auth.WithDefaultScheme("bearerAuth"),
-        ),
-    }
+    })
 
-    endpoints := []openswag.Endpoint{
-        {
-            Method:   "GET",
-            Path:     "/me",
-            Summary:  "Get current user",
-            Security: []string{"bearerAuth"},
-            Responses: []openswag.Response{
-                {StatusCode: 200, Description: "Current user", ContentType: "application/json"},
-                {StatusCode: 401, Description: "Unauthorized"},
-            },
+    docs.Add(openswag.Endpoint{
+        Method:   "GET",
+        Path:     "/me",
+        Summary:  "Get current user",
+        Security: []string{openswag.SecurityBearerAuth},
+        Responses: map[int]openswag.Response{
+            200: {Description: "Current user"},
+            401: {Description: "Unauthorized"},
         },
-    }
+    })
 
-    docs := openswag.New(cfg, endpoints...)
-    http.Handle("/docs/", docs.Handler())
-    http.ListenAndServe(":8080", nil)
+    // Optional: register the scheme explicitly with a custom description.
+    openapi := docs.BuildSpec()
+    openapi.AddSecurityScheme("bearerAuth", &spec.SecurityScheme{
+        Type:         "http",
+        Scheme:       "bearer",
+        BearerFormat: "JWT",
+        Description:  auth.BearerAuth("JWT authentication").Description,
+    })
+
+    mux := http.NewServeMux()
+    docs.Mount(mux, "/docs")
+    http.ListenAndServe(":8080", mux)
 }
 ```

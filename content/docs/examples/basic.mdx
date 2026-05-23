@@ -22,9 +22,14 @@ import (
 )
 
 type Pet struct {
-	ID   int    `json:"id" description:"Unique pet identifier" example:"1"`
-	Name string `json:"name" description:"Pet name" example:"Buddy"`
-	Kind string `json:"kind" description:"Animal type" example:"dog"`
+	ID   int    `json:"id" example:"1"`
+	Name string `json:"name" example:"Buddy"`
+	Kind string `json:"kind" example:"dog"`
+}
+
+type ErrorResponse struct {
+	Code    int    `json:"code" example:"404"`
+	Message string `json:"message" example:"Pet not found"`
 }
 
 var (
@@ -52,8 +57,8 @@ func main() {
 			Summary:     "List all pets",
 			Description: "Returns every pet in the store.",
 			Tags:        []string{"Pets"},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "A list of pets", ContentType: "application/json"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "A list of pets"},
 			},
 		},
 		{
@@ -67,9 +72,9 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 201, Description: "Pet created", ContentType: "application/json"},
-				{StatusCode: 400, Description: "Invalid input"},
+			Responses: map[int]openswag.Response{
+				201: {Description: "Pet created"},
+				400: {Description: "Invalid input"},
 			},
 		},
 		{
@@ -86,9 +91,9 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 200, Description: "Pet updated", ContentType: "application/json"},
-				{StatusCode: 404, Description: "Pet not found"},
+			Responses: map[int]openswag.Response{
+				200: {Description: "Pet updated"},
+				404: {Description: "Pet not found"},
 			},
 		},
 		{
@@ -100,15 +105,17 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Pet ID"},
 			},
-			Responses: []openswag.Response{
-				{StatusCode: 204, Description: "Pet deleted"},
-				{StatusCode: 404, Description: "Pet not found"},
+			Responses: map[int]openswag.Response{
+				204: {Description: "Pet deleted"},
+				404: {Description: "Pet not found"},
 			},
 		},
 	}
 
-	docs := openswag.New(cfg, endpoints...)
+	docs := openswag.New(cfg)
 
+
+	docs.AddAll(endpoints...)
 	mux := http.NewServeMux()
 
 	// Mount your actual handlers
@@ -118,7 +125,7 @@ func main() {
 	mux.HandleFunc("DELETE /pets/{id}", deletePet)
 
 	// Mount the docs UI
-	openswag.Mount(mux, "/docs", docs)
+	docs.Mount(mux, "/docs")
 
 	fmt.Println("API running on :8080, docs at http://localhost:8080/docs")
 	http.ListenAndServe(":8080", mux)
@@ -172,7 +179,7 @@ The `PUT` and `DELETE` endpoints use `{id}` in the path. Declare a matching `Par
 
 ### Mounting
 
-`openswag.Mount(mux, "/docs", docs)` attaches the Scalar-powered docs UI to your mux. Your actual API handlers and the docs live on the same server.
+`docs.Mount(mux, "/docs")` attaches the Scalar-powered docs UI to your mux. Your actual API handlers and the docs live on the same server.
 
 ## Run It
 

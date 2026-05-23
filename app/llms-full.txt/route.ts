@@ -1,11 +1,9 @@
 import { source } from '@/lib/source';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { getLLMText } from '@/lib/get-llm-text';
 
 export const revalidate = false;
 
 const SITE_URL = 'https://open-swaggo.andrianprasetya.com';
-const CONTENT_ROOT = path.join(process.cwd(), 'content/docs');
 
 const LANDING_MARKDOWN = `## Generate OpenAPI specs from Go structs & tags.
 
@@ -19,7 +17,7 @@ open-swaggo derives docs from your Go struct values and standard struct tags (js
 - **Schema Generation** — Derive OpenAPI schemas from Go structs using standard tags — json, validate, example, and more.
 - **Version Diffing** — Compare spec versions, detect breaking changes, and generate migration guides automatically.
 - **Theming & Scalar UI** — Predefined themes, dark mode, and custom CSS via Scalar integration for beautiful output.
-- **Code Snippets** — Generate ready-to-use code in curl, JavaScript, Go, Python, and PHP for every endpoint.
+- **Code Snippets** — Generate ready-to-use code in curl, JavaScript, Go, and Python for every endpoint.
 - **Docs Auth** — Protect your documentation with basic auth or API key gates for staging environments.
 - **Smart Examples** — Auto-generated request and response examples derived from struct tags and validation rules.
 
@@ -29,21 +27,18 @@ From Go structs to OpenAPI in seconds. Declare \`openswag.Endpoint\` values with
 
 ### How It Works (three steps to production-ready docs)
 
-1. **Annotate** — Add standard Go comments above your handlers with open-swaggo tags.
-2. **Generate** — Run \`open-swaggo gen ./...\` and watch your spec file appear in seconds.
-3. **Ship** — Serve your spec with Swagger UI, ReDoc, or feed it into your CI pipeline.
+1. **Define** — Declare \`openswag.Endpoint\` values co-located with your handlers; schemas are derived from your Go struct tags.
+2. **Register** — Build a \`*Docs\` with \`openswag.New(config)\` and add endpoints with \`docs.Add\` / \`docs.AddAll\`.
+3. **Mount** — Serve the interactive Scalar UI and OpenAPI spec with \`docs.Mount(mux, "/docs")\` (or a framework adapter).
 
 ### Quick Install
 
 \`\`\`bash
-# Install open-swaggo
-go install github.com/gopackx/open-swag-go@latest
+# Add the library
+go get github.com/gopackx/open-swag-go
 
-# Initialize your project
-open-swaggo init
-
-# Generate your spec
-open-swaggo gen ./...
+# Add a framework adapter (optional)
+go get github.com/gopackx/open-swag-go/adapters/gin
 \`\`\`
 
 ### Supported Frameworks
@@ -53,13 +48,13 @@ Gin, Echo, Fiber, Chi, net/http.
 ### FAQ
 
 **How does open-swaggo differ from swaggo/swag?**
-open-swaggo supports OpenAPI 3.x natively, has pluggable framework adapters, and generates specs at build time with zero runtime overhead. It's a modern rethink built for today's Go ecosystem.
+open-swaggo supports OpenAPI 3.x natively and uses co-located struct definitions instead of comment annotations, with pluggable framework adapters and a built-in Scalar UI. It's a modern rethink built for today's Go ecosystem.
 
 **Which Go frameworks are supported?**
 Gin, Echo, Fiber, Chi, and net/http are supported out of the box. The adapter system is pluggable, so adding a new framework takes minimal effort.
 
 **Can I use it in my CI/CD pipeline?**
-Absolutely. open-swaggo is a single binary with no dependencies. Add \`open-swaggo gen ./...\` to your build step and validate specs on every push.
+Absolutely. You can call \`docs.SpecJSON()\` to export the OpenAPI spec as JSON in a small Go program and validate it on every push.
 
 **Is it production-ready?**
 Yes. open-swaggo is used in production by teams worldwide. It's MIT-licensed, actively maintained, and covered by comprehensive tests.
@@ -97,29 +92,10 @@ export async function GET() {
   out.push('---');
   out.push('');
 
-  // All docs pages
-  for (const page of pages) {
-    const filePath = await resolveMdxFile(page.slugs);
-    if (!filePath) continue;
-
-    let raw: string;
-    try {
-      raw = await fs.readFile(filePath, 'utf-8');
-    } catch {
-      continue;
-    }
-
-    const content = stripFrontmatter(raw).trim();
-
-    out.push(`# ${page.data.title}`);
-    out.push('');
-    out.push(`URL: ${SITE_URL}${page.url}`);
-    if (page.data.description) {
-      out.push('');
-      out.push(`> ${page.data.description}`);
-    }
-    out.push('');
-    out.push(content);
+  // All docs pages — rendered to clean markdown via the fumadocs MDX pipeline.
+  const rendered = await Promise.all(pages.map((page) => getLLMText(page)));
+  for (const md of rendered) {
+    out.push(md.trim());
     out.push('');
     out.push('---');
     out.push('');
@@ -128,37 +104,4 @@ export async function GET() {
   return new Response(out.join('\n'), {
     headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
-}
-
-async function resolveMdxFile(slugs: readonly string[]): Promise<string | null> {
-  const slugPath = slugs.join('/');
-  const candidates: string[] = [];
-  if (slugs.length === 0) {
-    candidates.push(path.join(CONTENT_ROOT, 'index.mdx'));
-    candidates.push(path.join(CONTENT_ROOT, 'index.md'));
-  } else {
-    candidates.push(path.join(CONTENT_ROOT, slugPath + '.mdx'));
-    candidates.push(path.join(CONTENT_ROOT, slugPath + '.md'));
-    candidates.push(path.join(CONTENT_ROOT, slugPath, 'index.mdx'));
-    candidates.push(path.join(CONTENT_ROOT, slugPath, 'index.md'));
-  }
-  for (const c of candidates) {
-    try {
-      await fs.access(c);
-      return c;
-    } catch {
-      // try next
-    }
-  }
-  return null;
-}
-
-function stripFrontmatter(raw: string): string {
-  if (!raw.startsWith('---')) return raw;
-  const end = raw.indexOf('\n---', 3);
-  if (end === -1) return raw;
-  // skip the closing "\n---" plus the newline after it
-  let after = end + 4;
-  if (raw[after] === '\n') after += 1;
-  return raw.slice(after);
 }

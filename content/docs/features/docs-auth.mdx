@@ -1,11 +1,11 @@
 ---
 title: Docs Authentication
-description: Protect your API documentation with basic auth or API key authentication using DocsAuth.
+description: Protect your API documentation with basic auth or an API key using DocsAuth.
 ---
 
 # Docs Authentication
 
-Open-swag-go lets you restrict access to your API documentation pages. The `DocsAuth` struct supports basic auth (username/password) and API key protection so you can keep internal or staging docs private.
+Open-swag-go lets you restrict access to your API documentation pages. The `DocsAuth` struct supports basic auth (username/password) and an API key (passed as a `?key=` query parameter) so you can keep internal or staging docs private.
 
 ## DocsAuth
 
@@ -14,8 +14,8 @@ type DocsAuth struct {
 	Enabled  bool   // Enable docs authentication
 	Username string // Username for basic auth
 	Password string // Password for basic auth
-	APIKey   string // API key for key-based auth
-	APIKeyHeader string // Header name for the API key (default: X-API-Key)
+	Realm    string // Basic auth realm (default: "API Documentation")
+	APIKey   string // API key, supplied by clients as ?key=<value>
 }
 ```
 
@@ -24,9 +24,11 @@ type DocsAuth struct {
 Protect your docs with a username and password. Visitors are prompted with a browser login dialog before they can view the documentation.
 
 ```go title="basic_auth.go"
-docs := openswag.Config{
-	Title:   "Internal API",
-	Version: "1.0.0",
+cfg := openswag.Config{
+	Info: openswag.Info{
+		Title:   "Internal API",
+		Version: "1.0.0",
+	},
 	DocsAuth: &openswag.DocsAuth{
 		Enabled:  true,
 		Username: "admin",
@@ -35,7 +37,7 @@ docs := openswag.Config{
 }
 ```
 
-When a visitor navigates to the docs URL, the server responds with a `401 Unauthorized` and a `WWW-Authenticate: Basic` header. The browser shows a native login prompt. After entering valid credentials, the docs load normally.
+When a visitor navigates to the docs URL, the server responds with a `401 Unauthorized` and a `WWW-Authenticate: Basic` header. The browser shows a native login prompt. After entering valid credentials, the docs load normally. Set `Realm` to customise the prompt's realm.
 
 ### Reading credentials from environment variables
 
@@ -44,9 +46,11 @@ Never hard-code credentials. Pull them from the environment at startup:
 ```go title="basic_auth_env.go"
 import "os"
 
-docs := openswag.Config{
-	Title:   "Internal API",
-	Version: "1.0.0",
+cfg := openswag.Config{
+	Info: openswag.Info{
+		Title:   "Internal API",
+		Version: "1.0.0",
+	},
 	DocsAuth: &openswag.DocsAuth{
 		Enabled:  true,
 		Username: os.Getenv("DOCS_USERNAME"),
@@ -57,34 +61,28 @@ docs := openswag.Config{
 
 ## API Key Auth
 
-Use an API key instead of username/password. The client must send the key in a request header.
+Use an API key instead of username/password. Clients access the docs by appending the key as a `?key=` query parameter (e.g. `/docs/?key=my-secret-api-key`).
 
 ```go title="api_key_auth.go"
-docs := openswag.Config{
-	Title:   "Partner API",
-	Version: "1.0.0",
+cfg := openswag.Config{
+	Info: openswag.Info{
+		Title:   "Partner API",
+		Version: "1.0.0",
+	},
 	DocsAuth: &openswag.DocsAuth{
-		Enabled:      true,
-		APIKey:       "my-secret-api-key",
-		APIKeyHeader: "X-API-Key",
+		Enabled: true,
+		APIKey:  "my-secret-api-key",
 	},
 }
 ```
 
-Requests without a valid `X-API-Key` header receive a `401 Unauthorized` response. If `APIKeyHeader` is not set, it defaults to `X-API-Key`.
+Requests without a valid `?key=` value receive a `401 Unauthorized` response.
 
-### Custom header name
-
-```go title="custom_header.go"
-docs := openswag.Config{
-	Title:   "Partner API",
-	Version: "1.0.0",
-	DocsAuth: &openswag.DocsAuth{
-		Enabled:      true,
-		APIKey:       os.Getenv("DOCS_API_KEY"),
-		APIKeyHeader: "Authorization",
-	},
-}
+```go title="api_key_env.go"
+DocsAuth: &openswag.DocsAuth{
+	Enabled: true,
+	APIKey:  os.Getenv("DOCS_API_KEY"),
+},
 ```
 
 ## Choosing Between Basic Auth and API Key
@@ -92,10 +90,10 @@ docs := openswag.Config{
 | Feature | Basic Auth | API Key |
 |---------|-----------|---------|
 | Browser prompt | Yes (native dialog) | No |
-| Programmatic access | Requires Base64 encoding | Simple header |
+| Programmatic access | Requires Base64 encoding | Simple `?key=` query param |
 | Best for | Internal teams | CI/CD, partner integrations |
 
-If both `Username`/`Password` and `APIKey` are set, basic auth takes precedence.
+When both `Username`/`Password` and `APIKey` are set, a valid API key in the query string is checked first; otherwise basic auth applies.
 
 ## Full Example
 
@@ -114,29 +112,30 @@ import (
 )
 
 func main() {
-	docs := openswag.Config{
-		Title:       "Internal API",
-		Version:     "1.0.0",
-		Description: "Protected documentation",
+	docs := openswag.New(openswag.Config{
+		Info: openswag.Info{
+			Title:       "Internal API",
+			Version:     "1.0.0",
+			Description: "Protected documentation",
+		},
 		DocsAuth: &openswag.DocsAuth{
 			Enabled:  true,
 			Username: os.Getenv("DOCS_USERNAME"),
 			Password: os.Getenv("DOCS_PASSWORD"),
 		},
-		Endpoints: []openswag.Endpoint{
-			{
-				Method:  "GET",
-				Path:    "/health",
-				Summary: "Health check",
-				Responses: []openswag.Response{
-					{StatusCode: 200, Description: "OK"},
-				},
-			},
+	})
+
+	docs.Add(openswag.Endpoint{
+		Method:  "GET",
+		Path:    "/health",
+		Summary: "Health check",
+		Responses: map[int]openswag.Response{
+			200: {Description: "OK"},
 		},
-	}
+	})
 
 	r := chi.NewRouter()
-	adapter.Mount(r, docs)
+	adapter.Mount(r, docs, "/docs")
 
 	http.ListenAndServe(":8080", r)
 }

@@ -30,20 +30,22 @@ func main() {
 	e := echo.New()
 
 	docs := openswag.New(openswag.Config{
-		Title:   "My API",
-		Version: "1.0.0",
+		Info: openswag.Info{
+			Title:   "My API",
+			Version: "1.0.0",
+		},
 	})
 
 	docs.Add(openswag.Endpoint{
 		Method:  "GET",
 		Path:    "/health",
 		Summary: "Health check",
-		Responses: []openswag.Response{
-			{Status: 200, Description: "OK"},
+		Responses: map[int]openswag.Response{
+			200: {Description: "OK"},
 		},
 	})
 
-	swagecho.Mount(e, "/docs", docs)
+	swagecho.Mount(e, docs, "/docs")
 
 	e.Logger.Fatal(e.Start(":8080"))
 }
@@ -57,7 +59,7 @@ func main() {
 api := e.Group("/api/v1")
 api.Use(middleware.BasicAuth(validateUser))
 
-swagecho.MountGroup(api, "/docs", docs)
+swagecho.MountGroup(api, docs)
 // Docs served at /api/v1/docs
 ```
 

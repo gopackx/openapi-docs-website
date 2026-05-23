@@ -29,8 +29,8 @@ openswag.Endpoint{
 	Method:  "GET",
 	Path:    "/health",
 	Summary: "Health check",
-	Responses: []openswag.Response{
-		{StatusCode: 200, Description: "OK"},
+	Responses: map[int]openswag.Response{
+		200: {Description: "OK"},
 	},
 }
 ```
@@ -67,9 +67,9 @@ openswag.Endpoint{
 			Schema:      int64(0),
 		},
 	},
-	Responses: []openswag.Response{
-		{StatusCode: 200, Description: "User found", ContentType: "application/json"},
-		{StatusCode: 404, Description: "User not found"},
+	Responses: map[int]openswag.Response{
+		200: {Description: "User found"},
+		404: {Description: "User not found"},
 	},
 }
 ```
@@ -106,8 +106,8 @@ openswag.Endpoint{
 			Schema:      "",
 		},
 	},
-	Responses: []openswag.Response{
-		{StatusCode: 200, Description: "Paginated product list", ContentType: "application/json"},
+	Responses: map[int]openswag.Response{
+		200: {Description: "Paginated product list"},
 	},
 }
 ```
@@ -137,9 +137,9 @@ openswag.Endpoint{
 		Required:    true,
 		Schema:      CreateUserRequest{},
 	},
-	Responses: []openswag.Response{
-		{StatusCode: 201, Description: "User created", ContentType: "application/json"},
-		{StatusCode: 400, Description: "Validation error"},
+	Responses: map[int]openswag.Response{
+		201: {Description: "User created"},
+		400: {Description: "Validation error"},
 	},
 }
 ```
@@ -150,33 +150,18 @@ Each endpoint declares one or more `Response` entries for different status codes
 
 ```go title="response.go"
 type Response struct {
-	StatusCode  int         // HTTP status code (200, 201, 404, etc.)
 	Description string      // What this response means
-	ContentType string      // MIME type of the response body (optional)
 	Schema      interface{} // Go struct for schema generation (optional)
 }
 ```
 
-Endpoints typically include at least a success response and one or two error responses:
+The status code is the **map key** in `Endpoint.Responses` — it is not a field on `Response`. Endpoints typically include at least a success response and one or two error responses:
 
 ```go
-Responses: []openswag.Response{
-	{
-		StatusCode:  200,
-		Description: "Successful response",
-		ContentType: "application/json",
-		Schema:      UserResponse{},
-	},
-	{
-		StatusCode:  400,
-		Description: "Invalid request parameters",
-		ContentType: "application/json",
-		Schema:      ErrorResponse{},
-	},
-	{
-		StatusCode:  404,
-		Description: "Resource not found",
-	},
+Responses: map[int]openswag.Response{
+	200: {Description: "Successful response", Schema: UserResponse{}},
+	400: {Description: "Invalid request parameters", Schema: ErrorResponse{}},
+	404: {Description: "Resource not found"},
 }
 ```
 
@@ -208,8 +193,8 @@ openswag.Endpoint{
 	Summary:    "List products with filtering",
 	Tags:       []string{"Products"},
 	Parameters: openswag.ParametersFromStruct(ListProductsParams{}),
-	Responses: []openswag.Response{
-		{StatusCode: 200, Description: "Product list", ContentType: "application/json"},
+	Responses: map[int]openswag.Response{
+		200: {Description: "Product list"},
 	},
 }
 ```
@@ -261,8 +246,8 @@ func listProducts() openswag.Endpoint {
 		Summary:    "List products",
 		Tags:       []string{"Products"},
 		Parameters: openswag.ParametersFromStruct(ListProductsParams{}),
-		Responses: []openswag.Response{
-			{StatusCode: 200, Description: "Product list", ContentType: "application/json"},
+		Responses: map[int]openswag.Response{
+			200: {Description: "Product list"},
 		},
 	}
 }
@@ -276,9 +261,9 @@ func getProduct() openswag.Endpoint {
 		Parameters: []openswag.Parameter{
 			{Name: "id", In: "path", Required: true, Schema: int64(0)},
 		},
-		Responses: []openswag.Response{
-			{StatusCode: 200, Description: "Product details", ContentType: "application/json"},
-			{StatusCode: 404, Description: "Product not found"},
+		Responses: map[int]openswag.Response{
+			200: {Description: "Product details"},
+			404: {Description: "Product not found"},
 		},
 	}
 }
@@ -295,9 +280,9 @@ func createProduct() openswag.Endpoint {
 			Required:    true,
 			Schema:      CreateProductRequest{},
 		},
-		Responses: []openswag.Response{
-			{StatusCode: 201, Description: "Product created", ContentType: "application/json"},
-			{StatusCode: 400, Description: "Validation error"},
+		Responses: map[int]openswag.Response{
+			201: {Description: "Product created"},
+			400: {Description: "Validation error"},
 		},
 	}
 }
@@ -311,7 +296,10 @@ endpoints := append(
 	handlers.UserEndpoints()...,
 )
 
-docs := openswag.New(cfg, endpoints...)
+docs := openswag.New(cfg)
+
+
+docs.AddAll(endpoints...)
 ```
 
 This pattern scales well as your API grows — each domain package owns its endpoint definitions, and the main file just assembles them.

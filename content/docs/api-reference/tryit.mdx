@@ -17,37 +17,43 @@ Top-level configuration for the try-it console.
 
 ```go
 type ConsoleConfig struct {
-    Enabled         bool                // Enable the try-it console
-    CORSProxy       string              // Proxy URL for cross-origin requests
-    DefaultHeaders  map[string]string   // Headers added to every request
-    Environments    []Environment       // Predefined environments
-    History         HistoryConfig       // Request history settings
-    Snippets        SnippetsConfig      // Code snippet generation settings
+    Enabled          bool              // Enable the try-it console
+    DefaultServer    string            // Default server URL
+    RequestTimeout   int               // Request timeout in milliseconds
+    ShowCodeSnippets bool              // Show generated code snippets
+    EnabledLanguages []string          // Snippet languages to display
+    CustomHeaders    map[string]string // Headers added to every request
+    ProxyURL         string            // Proxy URL for requests
+    CORSProxy        bool              // Enable a CORS proxy for browser requests
 }
 ```
 
-### Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `Enabled` | `bool` | Toggle the console on or off |
-| `CORSProxy` | `string` | Proxy URL to bypass CORS restrictions |
-| `DefaultHeaders` | `map[string]string` | Headers injected into every outgoing request |
-| `Environments` | `[]Environment` | Named sets of variables (e.g. staging, production) |
-| `History` | `HistoryConfig` | Controls request history storage |
-| `Snippets` | `SnippetsConfig` | Controls which languages appear in snippet generation |
-
-### Usage
+### Constructor and options
 
 ```go
-console := tryit.ConsoleConfig{
-    Enabled:   true,
-    CORSProxy: "https://proxy.example.com",
-    DefaultHeaders: map[string]string{
-        "X-Request-Source": "docs",
-    },
-}
+func DefaultConsoleConfig() ConsoleConfig
+func NewConsole(opts ...ConsoleOption) *ConsoleConfig
+
+func WithTimeout(ms int) ConsoleOption
+func WithDefaultServer(url string) ConsoleOption
+func WithLanguages(languages ...string) ConsoleOption
+func WithCustomHeader(key, value string) ConsoleOption
+func WithProxy(url string) ConsoleOption
+func WithCORSProxy(enabled bool) ConsoleOption
+func DisableSnippets() ConsoleOption
+func Disable() ConsoleOption
 ```
+
+```go
+console := tryit.NewConsole(
+    tryit.WithDefaultServer("https://api.example.com"),
+    tryit.WithTimeout(15000),
+    tryit.WithCustomHeader("X-Request-Source", "docs"),
+    tryit.WithLanguages("curl", "javascript", "go", "python"),
+)
+```
+
+> Snippet generators ship for **curl, JavaScript, Go, and Python**. `"php"` may appear in the default language list but has no generator, so no PHP snippet is produced.
 
 ## Environment
 
@@ -56,70 +62,53 @@ A named set of variables that can be switched in the console.
 ```go
 type Environment struct {
     Name      string            // Display name, e.g. "Staging"
-    Variables map[string]string // Key-value pairs, e.g. {"base_url": "https://staging.api.com"}
+    Variables map[string]string // Key-value pairs
+    IsActive  bool              // Whether this is the active environment
+}
+
+type EnvironmentConfig struct {
+    Enabled    bool
+    Storage    string
+    StorageKey string
 }
 ```
 
 ## EnvironmentManager
 
-Manages multiple environments and resolves variable references in requests.
+Manages multiple environments and interpolates variable references in requests.
 
 ```go
-type EnvironmentManager struct {
-    // unexported fields
-}
-
-func NewEnvironmentManager(envs ...Environment) *EnvironmentManager
+func DefaultEnvironmentConfig() EnvironmentConfig
+func NewEnvironmentManager(config EnvironmentConfig) *EnvironmentManager
+func CreateDefaultEnvironments() []Environment
 ```
 
 ### Methods
 
 ```go
-func (m *EnvironmentManager) Active() *Environment
-```
-
-Returns the currently selected environment.
-
-```go
-func (m *EnvironmentManager) SetActive(name string) error
-```
-
-Switches to the environment with the given name. Returns an error if the name is not found.
-
-```go
-func (m *EnvironmentManager) Resolve(input string) string
-```
-
-Replaces `{{variable}}` placeholders in the input string with values from the active environment.
-
-```go
 func (m *EnvironmentManager) Add(env Environment)
+func (m *EnvironmentManager) Get() []Environment
+func (m *EnvironmentManager) GetByName(name string) (Environment, bool)
+func (m *EnvironmentManager) SetActive(name string) bool
+func (m *EnvironmentManager) GetActive() (Environment, bool)
+func (m *EnvironmentManager) Delete(name string) bool
+func (m *EnvironmentManager) Update(name string, variables map[string]string) bool
+func (m *EnvironmentManager) Interpolate(input string) string
+func (m *EnvironmentManager) ToJSON() (string, error)
+func (m *EnvironmentManager) FromJSON(data string) error
+func (m *EnvironmentManager) GetConfig() EnvironmentConfig
 ```
 
-Adds a new environment at runtime.
+`Interpolate` replaces `{{variable}}` placeholders with values from the active environment.
 
 ```go
-func (m *EnvironmentManager) List() []Environment
-```
-
-Returns all registered environments.
-
-### Usage
-
-```go
-mgr := tryit.NewEnvironmentManager(
-    tryit.Environment{
-        Name:      "Local",
-        Variables: map[string]string{"base_url": "http://localhost:8080"},
-    },
-    tryit.Environment{
-        Name:      "Staging",
-        Variables: map[string]string{"base_url": "https://staging.api.com"},
-    },
-)
-
+mgr := tryit.NewEnvironmentManager(tryit.DefaultEnvironmentConfig())
+mgr.Add(tryit.Environment{
+    Name:      "Staging",
+    Variables: map[string]string{"base_url": "https://staging.api.com"},
+})
 mgr.SetActive("Staging")
-url := mgr.Resolve("{{base_url}}/users") // "https://staging.api.com/users"
+url := mgr.Interpolate("{{base_url}}/users") // "https://staging.api.com/users"
 ```
 
 ## History
@@ -128,76 +117,56 @@ Stores and retrieves past requests made through the console.
 
 ```go
 type HistoryConfig struct {
-    Enabled  bool // Enable request history
-    MaxItems int  // Maximum stored entries (default 50)
+    Enabled    bool
+    MaxEntries int
+    Storage    string
+    StorageKey string
 }
-```
 
-```go
 type HistoryEntry struct {
-    ID        string            // Unique entry identifier
-    Timestamp time.Time         // When the request was made
-    Method    string            // HTTP method
-    URL       string            // Full request URL
-    Headers   map[string]string // Request headers
-    Body      string            // Request body
-    Status    int               // Response status code
-    Duration  time.Duration     // Round-trip time
+    ID          string
+    Timestamp   time.Time
+    Method      string
+    URL         string
+    Path        string
+    Headers     map[string]string
+    Body        string
+    StatusCode  int
+    Response    string
+    Duration    int64 // milliseconds
+    OperationID string
 }
 ```
 
 ```go
-type History struct {
-    // unexported fields
-}
-
-func NewHistory(cfg HistoryConfig) *History
+func DefaultHistoryConfig() HistoryConfig
+func NewHistory(config HistoryConfig) *History
 ```
 
 ### Methods
 
 ```go
 func (h *History) Add(entry HistoryEntry)
-```
-
-Stores a new entry. If `MaxItems` is reached, the oldest entry is evicted.
-
-```go
-func (h *History) List() []HistoryEntry
-```
-
-Returns all entries in reverse chronological order.
-
-```go
+func (h *History) Get() []HistoryEntry
+func (h *History) GetByID(id string) (HistoryEntry, bool)
 func (h *History) Clear()
+func (h *History) Delete(id string) bool
+func (h *History) ToJSON() (string, error)
+func (h *History) FromJSON(data string) error
+func (h *History) GetConfig() HistoryConfig
 ```
 
-Removes all stored entries.
-
 ```go
-func (h *History) Get(id string) (*HistoryEntry, error)
-```
-
-Retrieves a single entry by ID.
-
-### Usage
-
-```go
-hist := tryit.NewHistory(tryit.HistoryConfig{
-    Enabled:  true,
-    MaxItems: 100,
-})
-
+hist := tryit.NewHistory(tryit.DefaultHistoryConfig())
 hist.Add(tryit.HistoryEntry{
-    Method: "GET",
-    URL:    "https://api.example.com/users",
-    Status: 200,
+    Method:     "GET",
+    URL:        "https://api.example.com/users",
+    StatusCode: 200,
 })
-
-entries := hist.List()
+entries := hist.Get()
 ```
 
-## Snippets Sub-Package
+## Snippets sub-package
 
 `pkg/tryit/snippets` generates ready-to-use code snippets from a request definition.
 
@@ -205,67 +174,53 @@ entries := hist.List()
 import "github.com/gopackx/open-swag-go/pkg/tryit/snippets"
 ```
 
-### SnippetsConfig
-
-```go
-type SnippetsConfig struct {
-    Languages []string // Enabled languages: "curl", "javascript", "go", "python", "php"
-}
-```
-
-### Generator
-
-```go
-type Generator struct {
-    // unexported fields
-}
-
-func New(cfg SnippetsConfig) *Generator
-```
-
 ### Request
-
-Input type describing the HTTP request to generate a snippet for.
 
 ```go
 type Request struct {
-    Method  string
-    URL     string
-    Headers map[string]string
-    Body    string
+    Method      string
+    URL         string
+    Headers     map[string]string
+    Body        string
+    QueryParams map[string]string
 }
 ```
 
-### Methods
+### Generator and Manager
+
+`Generator` is an interface; `Manager` holds the registered generators.
 
 ```go
-func (g *Generator) Generate(req Request, lang string) (string, error)
+type Generator interface {
+    Generate(req Request) string
+    Language() string
+    DisplayName() string
+}
+
+func NewManager() *Manager // registers curl, javascript, go, python
+
+func (m *Manager) Register(gen Generator)
+func (m *Manager) Generate(language string, req Request) (string, bool)
+func (m *Manager) GenerateAll(req Request) map[string]string
+func (m *Manager) Languages() []string
+func (m *Manager) GetGenerator(language string) (Generator, bool)
 ```
-
-Returns a code snippet for the given request in the specified language. Returns an error if the language is not enabled.
-
-```go
-func (g *Generator) Languages() []string
-```
-
-Returns the list of enabled languages.
 
 ### Usage
 
 ```go
-gen := snippets.New(snippets.SnippetsConfig{
-    Languages: []string{"curl", "javascript", "go", "python", "php"},
-})
+mgr := snippets.NewManager()
 
-snippet, _ := gen.Generate(snippets.Request{
+snippet, ok := mgr.Generate("curl", snippets.Request{
     Method:  "POST",
     URL:     "https://api.example.com/users",
     Headers: map[string]string{"Content-Type": "application/json"},
     Body:    `{"name": "Alice"}`,
-}, "curl")
+})
+if ok {
+    fmt.Println(snippet)
+}
 
-// Output:
-// curl -X POST https://api.example.com/users \
-//   -H "Content-Type: application/json" \
-//   -d '{"name": "Alice"}'
+// Or generate every language at once:
+all := mgr.GenerateAll(snippets.Request{Method: "GET", URL: "https://api.example.com/users"})
 ```
