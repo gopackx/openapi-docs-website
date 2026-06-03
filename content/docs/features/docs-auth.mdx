@@ -129,7 +129,7 @@ func main() {
 		Method:  "GET",
 		Path:    "/health",
 		Summary: "Health check",
-		Responses: map[int]openswag.Response{
+		Responses: openswag.Responses{
 			200: {Description: "OK"},
 		},
 	})

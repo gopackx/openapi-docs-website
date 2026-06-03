@@ -57,7 +57,7 @@ docs.Add(openswag.Endpoint{
     Method:  "GET",
     Path:    "/api/users",
     Summary: "List users",
-    Responses: map[int]openswag.Response{
+    Responses: openswag.Responses{
         200: {
             Description: "Success", // Don't leave this empty
             Schema:      []User{},

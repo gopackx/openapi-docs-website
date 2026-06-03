@@ -116,7 +116,7 @@ func main() {
 				{Name: "sort_by", In: "query", Description: "Sort field (name, price, category)"},
 				{Name: "order", In: "query", Description: "Sort order (asc, desc)"},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Paginated product list"},
 			},
 		},
@@ -129,7 +129,7 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Product ID"},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Product details"},
 				404: {Description: "Product not found"},
 			},
@@ -146,7 +146,7 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				201: {Description: "Product created"},
 				400: {Description: "Validation error"},
 				401: {Description: "Unauthorized"},
@@ -165,7 +165,7 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				201: {Description: "Order placed"},
 				400: {Description: "Invalid order"},
 				401: {Description: "Unauthorized"},
@@ -181,7 +181,7 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Order ID"},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Order details"},
 				401: {Description: "Unauthorized"},
 				404: {Description: "Order not found"},

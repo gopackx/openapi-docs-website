@@ -50,7 +50,7 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "JWT token"},
 				401: {Description: "Invalid credentials"},
 			},
@@ -62,7 +62,7 @@ func main() {
 			Summary:  "Get current user",
 			Tags:     []string{"Users"},
 			Security: []string{"bearerAuth"},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "User profile"},
 				401: {Description: "Unauthorized"},
 			},
@@ -75,7 +75,7 @@ func main() {
 			Description: "Used by monitoring services. Requires an API key.",
 			Tags:        []string{"Internal"},
 			Security:    []string{"apiKey"},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Service healthy"},
 				403: {Description: "Invalid API key"},
 			},
@@ -88,7 +88,7 @@ func main() {
 			Description: "Returns all users. Requires the oauth2 scheme.",
 			Tags:        []string{"Users"},
 			Security:    []string{"oauth2"},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "User list"},
 				401: {Description: "Unauthorized"},
 				403: {Description: "Insufficient scope"},
@@ -105,7 +105,7 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "User ID", Schema: spec.NewSchema("string")},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				204: {Description: "User deleted"},
 				401: {Description: "Unauthorized"},
 				403: {Description: "Forbidden — missing API key"},

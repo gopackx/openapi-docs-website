@@ -187,7 +187,7 @@ func main() {
 			Required:    true,
 			Schema:      CreateUserRequest{},
 		},
-		Responses: map[int]openswag.Response{
+		Responses: openswag.Responses{
 			201: {Description: "User created", Schema: UserResponse{}},
 		},
 	})

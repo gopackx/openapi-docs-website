@@ -108,7 +108,7 @@ docs.Add(openswag.Endpoint{
     Path:    "/api/users",
     Summary: "List users",
     Tags:    []string{"Users"},
-    Responses: map[int]openswag.Response{
+    Responses: openswag.Responses{
         200: {Description: "User list"},
     },
 })

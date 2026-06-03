@@ -29,7 +29,7 @@ openswag.Endpoint{
 	Method:  "GET",
 	Path:    "/health",
 	Summary: "Health check",
-	Responses: map[int]openswag.Response{
+	Responses: openswag.Responses{
 		200: {Description: "OK"},
 	},
 }
@@ -67,7 +67,7 @@ openswag.Endpoint{
 			Schema:      int64(0),
 		},
 	},
-	Responses: map[int]openswag.Response{
+	Responses: openswag.Responses{
 		200: {Description: "User found"},
 		404: {Description: "User not found"},
 	},
@@ -106,7 +106,7 @@ openswag.Endpoint{
 			Schema:      "",
 		},
 	},
-	Responses: map[int]openswag.Response{
+	Responses: openswag.Responses{
 		200: {Description: "Paginated product list"},
 	},
 }
@@ -137,7 +137,7 @@ openswag.Endpoint{
 		Required:    true,
 		Schema:      CreateUserRequest{},
 	},
-	Responses: map[int]openswag.Response{
+	Responses: openswag.Responses{
 		201: {Description: "User created"},
 		400: {Description: "Validation error"},
 	},
@@ -158,7 +158,7 @@ type Response struct {
 The status code is the **map key** in `Endpoint.Responses` — it is not a field on `Response`. Endpoints typically include at least a success response and one or two error responses:
 
 ```go
-Responses: map[int]openswag.Response{
+Responses: openswag.Responses{
 	200: {Description: "Successful response", Schema: UserResponse{}},
 	400: {Description: "Invalid request parameters", Schema: ErrorResponse{}},
 	404: {Description: "Resource not found"},
@@ -193,7 +193,7 @@ openswag.Endpoint{
 	Summary:    "List products with filtering",
 	Tags:       []string{"Products"},
 	Parameters: openswag.ParametersFromStruct(ListProductsParams{}),
-	Responses: map[int]openswag.Response{
+	Responses: openswag.Responses{
 		200: {Description: "Product list"},
 	},
 }
@@ -246,7 +246,7 @@ func listProducts() openswag.Endpoint {
 		Summary:    "List products",
 		Tags:       []string{"Products"},
 		Parameters: openswag.ParametersFromStruct(ListProductsParams{}),
-		Responses: map[int]openswag.Response{
+		Responses: openswag.Responses{
 			200: {Description: "Product list"},
 		},
 	}
@@ -261,7 +261,7 @@ func getProduct() openswag.Endpoint {
 		Parameters: []openswag.Parameter{
 			{Name: "id", In: "path", Required: true, Schema: int64(0)},
 		},
-		Responses: map[int]openswag.Response{
+		Responses: openswag.Responses{
 			200: {Description: "Product details"},
 			404: {Description: "Product not found"},
 		},
@@ -280,7 +280,7 @@ func createProduct() openswag.Endpoint {
 			Required:    true,
 			Schema:      CreateProductRequest{},
 		},
-		Responses: map[int]openswag.Response{
+		Responses: openswag.Responses{
 			201: {Description: "Product created"},
 			400: {Description: "Validation error"},
 		},

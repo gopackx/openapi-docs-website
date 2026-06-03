@@ -110,6 +110,27 @@ type BreakingChange struct {
 }
 ```
 
+## What the differ detects
+
+`Compare` and `CompareFiles` walk the two specs and flag the following as
+breaking changes:
+
+- **Endpoint removed** — a path+method that existed in old but not new.
+- **Request body removed** — for an endpoint where it existed before.
+- **Required request body added** — body added with `required: true`.
+- **New required field** in a request body schema.
+- **Field type changed** — JSON `type` or `format` of an existing request-body
+  property differs. v1.2.0 added this — earlier versions defined
+  `BreakingTypeChanged` but never produced entries for it.
+- **Parameter removed** — query/path/header/cookie parameter dropped.
+- **Parameter type changed** — schema `type`/`format` of an existing parameter
+  differs (also new in v1.2.0).
+- **New required parameter** added.
+- **Response code removed** from an existing operation.
+
+Each detected entry includes a migration hint via the auto-generated
+`BreakingChange.Migration` field, suitable for surfacing in changelogs.
+
 ## Breaking change rules
 
 ```go

@@ -17,6 +17,7 @@ type Config struct {
     Servers  []Server   // Server URLs shown in the docs UI
     Tags     []Tag      // Logical groupings for endpoints
     UI       UIConfig   // Scalar UI appearance settings
+    Auth     AuthConfig // Security schemes exposed under components.securitySchemes
     DocsAuth *DocsAuth  // Optional password/API-key protection for the docs page
 }
 ```
@@ -31,6 +32,7 @@ type Config struct {
 | `Servers` | `[]Server` | Base URLs displayed in the server dropdown |
 | `Tags` | `[]Tag` | Grouping tags that organise endpoints in the sidebar |
 | `UI` | `UIConfig` | Theme, layout, and Scalar UI options |
+| `Auth` | `AuthConfig` | Security schemes exposed under `components.securitySchemes` |
 | `DocsAuth` | `*DocsAuth` | Protect the docs page with basic auth or an API key |
 
 ## Docs
@@ -83,10 +85,13 @@ type Endpoint struct {
     QueryParams interface{}       // Struct whose fields become query params (form/description/example tags)
     PathParams  interface{}       // Struct whose fields become path params (param tag)
     RequestBody *RequestBody      // Request body (nil for GET/DELETE)
-    Responses   map[int]Response  // Responses keyed by HTTP status code
+    Responses   Responses         // map[int]ResponseSpec keyed by HTTP status
     Security    []string          // Security scheme names applied to this endpoint
     Deprecated  bool              // Mark the endpoint as deprecated
 }
+
+// Responses is a convenience alias used in endpoint literals.
+type Responses = map[int]ResponseSpec
 ```
 
 ### Fields
@@ -101,8 +106,8 @@ type Endpoint struct {
 | `Parameters` | `[]Parameter` | Manually declared path, query, and header parameters |
 | `QueryParams` | `interface{}` | A struct whose fields (with `form` tags) become query parameters |
 | `PathParams` | `interface{}` | A struct whose fields (with `param` tags) become path parameters |
-| `RequestBody` | `*RequestBody` | Payload definition for write operations |
-| `Responses` | `map[int]Response` | Responses keyed by HTTP status code |
+| `RequestBody` | `*RequestBody` | Payload definition for write operations — build with `Body()` / `BodyWithDesc()` / `FormBody()` |
+| `Responses` | `Responses` | Status-code map — build entries with `Response(desc, schema)` |
 | `Security` | `[]string` | Names of security schemes this endpoint requires |
 | `Deprecated` | `bool` | Flags the endpoint as deprecated in the spec |
 
@@ -128,33 +133,136 @@ Describes the payload for POST, PUT, and PATCH operations.
 ```go
 type RequestBody struct {
     Description string      // What the body represents
-    ContentType string      // MIME type, e.g. "application/json"
+    ContentType string      // MIME type, e.g. "application/json", "multipart/form-data"
     Required    bool        // Whether the body is mandatory
     Schema      interface{} // Go struct for schema generation
 }
 ```
 
+`ContentType` is honored end-to-end — set it to `multipart/form-data` for file
+uploads and the generated spec will list that media type instead of
+`application/json`. Prefer the `Body()` / `FormBody()` / `FormURLEncodedBody()`
+helpers above when you don't need custom fields.
+
 In v1.1.0+, request body schemas automatically include a generated `example` field built from struct field tags and type defaults. Example values are type-coerced (e.g. `example:"42"` on an `int64` field produces the integer `42`, not the string `"42"`).
 
-## Response
+## ResponseSpec & Response()
 
-Describes a possible response for an endpoint.
+`ResponseSpec` is the struct stored in `Endpoint.Responses`. Build entries with the `Response()` helper for the concise, decorator-style form documented in the README:
 
 ```go
-type Response struct {
+type ResponseSpec struct {
     Description string      // What this response means
     Schema      interface{} // Go struct for schema generation (optional)
 }
+
+// Response builds a ResponseSpec. Pass the schema as the second argument,
+// or omit it for empty responses (e.g. 204 No Content).
+func Response(description string, schema ...interface{}) ResponseSpec
 ```
 
-Responses are keyed by status code in the `Endpoint.Responses` map, so the status code is the map key — not a field:
+Responses are keyed by status code in the `Endpoint.Responses` map:
 
 ```go
-Responses: map[int]openswag.Response{
-    200: {Description: "A list of pets", Schema: []Pet{}},
-    404: {Description: "Not found"},
+Responses: openswag.Responses{
+    200: openswag.Response("A list of pets", []Pet{}),
+    204: openswag.Response("Deleted"),
+    404: openswag.Response("Not found", ErrorResponse{}),
 },
 ```
+
+> The struct used to be named `Response`. v1.2.0 renamed it to `ResponseSpec` so
+> that `openswag.Response(...)` could become a constructor function. Field
+> literals still work — just replace the type name.
+
+## Request body helpers
+
+`*RequestBody` literals are verbose. Use these constructors:
+
+```go
+// JSON body (Required: true, ContentType: "application/json")
+openswag.Body(CreateUserRequest{})
+
+// JSON body with a description
+openswag.BodyWithDesc("Pet object to create", Pet{})
+
+// multipart/form-data — for file uploads / HTML forms
+openswag.FormBody(UploadRequest{})
+
+// application/x-www-form-urlencoded
+openswag.FormURLEncodedBody(LoginForm{})
+```
+
+All four return `*RequestBody`, so they slot directly into `Endpoint.RequestBody`.
+
+## Parameter helpers
+
+Decorator-style helpers that return a `Parameter` ready to drop into `Endpoint.Parameters`:
+
+```go
+openswag.PathParam("id", "User ID")                          // required path string
+openswag.QueryParam("include", "Related resources")           // optional query string
+openswag.RequiredQueryParam("filter", "Required filter")      // required query string
+openswag.HeaderParam("X-Request-ID", "Request tracking ID")   // optional header
+openswag.CookieParam("session", "Session cookie")             // optional cookie
+```
+
+All produce a string-typed schema. For typed query/path params, prefer the struct-based `QueryParams` / `PathParams` form below.
+
+## AuthConfig
+
+Top-level container for the security schemes your spec advertises.
+
+```go
+type AuthConfig struct {
+    PersistCredentials bool         // Keep try-it credentials between page reloads
+    Schemes            []AuthScheme // Schemes exposed under components.securitySchemes
+}
+
+type AuthScheme struct {
+    Name         string // ID referenced from Endpoint.Security
+    Type         string // "http", "apiKey", "oauth2", "openIdConnect"
+    Scheme       string // "bearer" / "basic" when Type == "http"
+    BearerFormat string // Hint for http+bearer (e.g. "JWT")
+    In           string // "header" / "query" / "cookie" when Type == "apiKey"
+    ParamName    string // Header/query/cookie name carrying the credential
+    Description  string
+}
+```
+
+Build entries with the helpers:
+
+```go
+Auth: openswag.AuthConfig{
+    PersistCredentials: true,
+    Schemes: []openswag.AuthScheme{
+        openswag.BearerAuth(openswag.SecurityBearerAuth),
+        openswag.APIKeyAuth("apiKey", "X-API-Key"),
+        openswag.BasicAuth(openswag.SecurityBasicAuth),
+        openswag.CookieAuth(openswag.SecurityCookieAuth, "session_id"),
+    },
+},
+```
+
+> Custom scheme names referenced from `Endpoint.Security` that are **not** one
+> of the `Security*` predefined constants and **not** registered in
+> `AuthConfig.Schemes` are intentionally left out of the spec — prior versions
+> silently materialised them as `http-bearer`, which masked typos. Register the
+> scheme explicitly to keep the previous behavior.
+
+## Predefined security names
+
+Use these constants in `Endpoint.Security` to pick up the built-in spec entries
+without supplying an `AuthScheme`:
+
+| Constant | Resolves to |
+|----------|-------------|
+| `SecurityBearerAuth` | http + bearer + JWT |
+| `SecurityBasicAuth` | http + basic |
+| `SecurityApiKey` | apiKey in `X-API-Key` header |
+| `SecurityApiKeyQuery` | apiKey in `?api_key=` query |
+| `SecurityCookieAuth` | apiKey in `session_id` cookie |
+| `SecurityOAuth2` | oauth2 authorization code |
 
 ## UIConfig
 
@@ -310,8 +418,8 @@ func main() {
             Path:    "/pets",
             Summary: "List all pets",
             Tags:    []string{"Pets"},
-            Responses: map[int]openswag.Response{
-                200: {Description: "A list of pets"},
+            Responses: openswag.Responses{
+                200: openswag.Response("A list of pets"),
             },
         },
     }

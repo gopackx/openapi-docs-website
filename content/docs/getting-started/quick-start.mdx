@@ -49,8 +49,8 @@ func main() {
 			Summary:     "List all pets",
 			Description: "Returns every pet in the store.",
 			Tags:        []string{"Pets"},
-			Responses: map[int]openswag.Response{
-				200: {Description: "A list of pets", Schema: []Pet{}},
+			Responses: openswag.Responses{
+				200: openswag.Response("A list of pets", []Pet{}),
 			},
 		},
 		{
@@ -59,13 +59,9 @@ func main() {
 			Summary:     "Add a pet",
 			Description: "Creates a new pet in the store.",
 			Tags:        []string{"Pets"},
-			RequestBody: &openswag.RequestBody{
-				Description: "Pet object to create",
-				Required:    true,
-				Schema:      Pet{},
-			},
-			Responses: map[int]openswag.Response{
-				201: {Description: "Pet created successfully", Schema: Pet{}},
+			RequestBody: openswag.BodyWithDesc("Pet object to create", Pet{}),
+			Responses: openswag.Responses{
+				201: openswag.Response("Pet created successfully", Pet{}),
 			},
 		},
 	}

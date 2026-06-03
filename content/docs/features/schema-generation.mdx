@@ -303,7 +303,7 @@ openswag.Endpoint{
 		Required:    true,
 		Schema:      CreateOrderRequest{},
 	},
-	Responses: map[int]openswag.Response{
+	Responses: openswag.Responses{
 		201: {Description: "Order created",
 			Schema:      OrderResponse{},
 		},

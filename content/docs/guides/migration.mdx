@@ -168,7 +168,7 @@ docs.Add(openswag.Endpoint{
     Path:       "/users/{id}",
     Summary:    "Get user",
     PathParams: GetUserParams{},
-    Responses: map[int]openswag.Response{
+    Responses: openswag.Responses{
         200: {Description: "User found", Schema: User{}},
     },
 })

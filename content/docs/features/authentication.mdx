@@ -51,7 +51,7 @@ openswag.Endpoint{
     Summary:  "Get current user profile",
     Tags:     []string{"Users"},
     Security: []string{openswag.SecurityBearerAuth},
-    Responses: map[int]openswag.Response{
+    Responses: openswag.Responses{
         200: {Description: "User profile"},
         401: {Description: "Unauthorized"},
     },
@@ -106,7 +106,7 @@ openswag.Endpoint{
     Summary:  "Create admin user",
     Tags:     []string{"Admin"},
     Security: []string{openswag.SecurityBearerAuth, openswag.SecurityApiKey},
-    Responses: map[int]openswag.Response{
+    Responses: openswag.Responses{
         201: {Description: "Admin user created"},
         401: {Description: "Unauthorized"},
         403: {Description: "Forbidden"},

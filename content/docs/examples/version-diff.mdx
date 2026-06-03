@@ -37,7 +37,7 @@ func main() {
 			Path:    "/tasks",
 			Summary: "List tasks",
 			Tags:    []string{"Tasks"},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Task list"},
 			},
 		},
@@ -51,7 +51,7 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				201: {Description: "Task created"},
 			},
 		},
@@ -63,7 +63,7 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Task ID"},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				204: {Description: "Task deleted"},
 			},
 		},
@@ -92,7 +92,7 @@ func main() {
 				{Name: "page", In: "query", Description: "Page number"},
 				{Name: "limit", In: "query", Description: "Items per page"},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Paginated task list"},
 			},
 		},
@@ -108,7 +108,7 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				201: {Description: "Task created"},
 				401: {Description: "Unauthorized"},
 			},
@@ -123,7 +123,7 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Task ID"},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Task archived"},
 				401: {Description: "Unauthorized"},
 			},
@@ -137,7 +137,7 @@ func main() {
 			Parameters: []openswag.Parameter{
 				{Name: "id", In: "path", Required: true, Description: "Task ID"},
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "Task change history"},
 			},
 		},

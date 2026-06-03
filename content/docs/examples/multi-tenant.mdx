@@ -37,7 +37,7 @@ func main() {
 			Path:    "/users",
 			Summary: "List users",
 			Tags:    []string{"Users"},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				200: {Description: "User list"},
 			},
 		},
@@ -51,7 +51,7 @@ func main() {
 				ContentType: "application/json",
 				Required:    true,
 			},
-			Responses: map[int]openswag.Response{
+			Responses: openswag.Responses{
 				201: {Description: "User created"},
 				400: {Description: "Validation error"},
 			},
@@ -76,7 +76,7 @@ func main() {
 				Summary:  "List invoices",
 				Tags:     []string{"Billing"},
 				Security: []string{openswag.SecurityBearerAuth},
-				Responses: map[int]openswag.Response{
+				Responses: openswag.Responses{
 					200: {Description: "Invoice list"},
 					401: {Description: "Unauthorized"},
 				},
@@ -102,7 +102,7 @@ func main() {
 						{Name: "from", In: "query", Description: "Start date (ISO 8601)"},
 						{Name: "to", In: "query", Description: "End date (ISO 8601)"},
 					},
-					Responses: map[int]openswag.Response{
+					Responses: openswag.Responses{
 						200: {Description: "Event list"},
 						401: {Description: "Unauthorized"},
 					},
@@ -113,7 +113,7 @@ func main() {
 					Summary:  "Get analytics summary",
 					Tags:     []string{"Analytics"},
 					Security: []string{openswag.SecurityBearerAuth},
-					Responses: map[int]openswag.Response{
+					Responses: openswag.Responses{
 						200: {Description: "Summary data"},
 						401: {Description: "Unauthorized"},
 					},

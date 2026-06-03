@@ -11,6 +11,13 @@ description: API reference for pkg/auth — security schemes, playground configu
 import "github.com/gopackx/open-swag-go/pkg/auth"
 ```
 
+> **Most users don't need this package directly.** The root `openswag` package
+> exposes higher-level helpers — `BearerAuth`, `APIKeyAuth`, `BasicAuth`,
+> `CookieAuth`, and `Config.Auth` — that wire schemes into the spec for you.
+> See the [Core Package](/docs/api-reference/core) reference. Reach for
+> `pkg/auth` only when you need playground configuration or the
+> `CredentialStore`.
+
 ## Scheme
 
 Represents a single OpenAPI security scheme.
@@ -86,7 +93,28 @@ openswag.Endpoint{
 }
 ```
 
-To register a custom scheme explicitly, build the spec and add it:
+To register a custom scheme, prefer the root-package `Config.Auth` field —
+that's both shorter and survives a `docs.BuildSpec()` rebuild:
+
+```go
+docs := openswag.New(openswag.Config{
+    Info: openswag.Info{Title: "Secure API", Version: "1.0.0"},
+    Auth: openswag.AuthConfig{
+        Schemes: []openswag.AuthScheme{
+            openswag.BearerAuth(openswag.SecurityBearerAuth),
+            openswag.APIKeyAuth("apiKey", "X-API-Key"),
+        },
+    },
+})
+```
+
+> Names listed in `Endpoint.Security` that match neither a `Security*` constant
+> **nor** an entry in `Config.Auth.Schemes` are intentionally omitted from the
+> generated spec. Earlier versions silently coerced them to `http-bearer`,
+> which masked typos in custom scheme names.
+
+If you really need to mutate the spec after the fact, `AddSecurityScheme` is
+still available:
 
 ```go
 openapi := docs.BuildSpec()
@@ -179,13 +207,17 @@ import (
     "net/http"
 
     openswag "github.com/gopackx/open-swag-go"
-    "github.com/gopackx/open-swag-go/pkg/auth"
-    "github.com/gopackx/open-swag-go/pkg/spec"
 )
 
 func main() {
     docs := openswag.New(openswag.Config{
         Info: openswag.Info{Title: "Secure API", Version: "1.0.0"},
+        Auth: openswag.AuthConfig{
+            PersistCredentials: true,
+            Schemes: []openswag.AuthScheme{
+                openswag.BearerAuth(openswag.SecurityBearerAuth),
+            },
+        },
     })
 
     docs.Add(openswag.Endpoint{
@@ -193,19 +225,10 @@ func main() {
         Path:     "/me",
         Summary:  "Get current user",
         Security: []string{openswag.SecurityBearerAuth},
-        Responses: map[int]openswag.Response{
-            200: {Description: "Current user"},
-            401: {Description: "Unauthorized"},
+        Responses: openswag.Responses{
+            200: openswag.Response("Current user"),
+            401: openswag.Response("Unauthorized"),
         },
-    })
-
-    // Optional: register the scheme explicitly with a custom description.
-    openapi := docs.BuildSpec()
-    openapi.AddSecurityScheme("bearerAuth", &spec.SecurityScheme{
-        Type:         "http",
-        Scheme:       "bearer",
-        BearerFormat: "JWT",
-        Description:  auth.BearerAuth("JWT authentication").Description,
     })
 
     mux := http.NewServeMux()
