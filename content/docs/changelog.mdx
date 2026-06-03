@@ -5,6 +5,51 @@ description: Release notes and version history for open-swag-go.
 
 # Changelog
 
+## v1.2.0
+
+A bug-fix + DX release. Closes the four bugs that produced wrong specs at runtime (self-referential structs, ignored `ContentType`, silent bearer fallback, dormant type-change detector) and finally ships the public API the README has been documenting all along.
+
+```bash
+go get github.com/gopackx/open-swag-go@v1.2.0
+```
+
+### Breaking change
+
+- **The `Response` struct is renamed to `ResponseSpec`** so `openswag.Response(desc, schema)` can be the constructor the README documents. Field-keyed literals inside `openswag.Responses{ ... }` keep compiling unchanged — only bare `openswag.Response{...}` literals need to migrate (use `openswag.Response("desc", T{})` or `openswag.ResponseSpec{...}`).
+
+### Fixed
+
+- **fix(schema):** Self-referential structs (e.g. `type Category struct { Children []Category }`) no longer cause a stack overflow during spec generation. `fromReflectType` now threads a visiting-type set; back-edges return a bounded object schema with a description note.
+- **fix(openapi):** `RequestBody.ContentType` is now honored end-to-end. `multipart/form-data` and `application/x-www-form-urlencoded` bodies appear in the spec under the correct media type instead of being silently rewritten to `application/json`. Added `pkg/spec.RequestBody.WithContent(mediaType, schema)` to back the new behavior.
+- **fix(openapi):** Custom security scheme names referenced from `Endpoint.Security` are no longer silently coerced into `http-bearer`. Unknown names are now omitted from `components.securitySchemes` so typos surface immediately. Register custom schemes explicitly via the new `Config.Auth.Schemes` field.
+- **fix(versioning):** `compareOperations` now produces entries for `BreakingTypeChanged`. Changes to a request-body field's JSON `type`/`format` and changes to a parameter's schema type are flagged as breaking, with migration hints. Also fixed a latent index-out-of-range bug in `getMigrationGuide` (short descriptions could panic the migration formatter).
+
+### New public API
+
+The README has documented these helpers for several versions, but the package never exposed them — Quick Start examples could not compile. They exist now:
+
+- **Request body builders:** `Body(schema)`, `BodyWithDesc(desc, schema)`, `FormBody(schema)`, `FormURLEncodedBody(schema)` — all return `*RequestBody` ready to drop into `Endpoint.RequestBody`.
+- **Response constructor:** `Response(desc, schema...)` returns a `ResponseSpec`. Pass the schema as the second argument or omit it for empty responses (e.g. 204 No Content). The type alias `Responses = map[int]ResponseSpec` exists for the decorator-style map literal.
+- **Parameter helpers:** `PathParam`, `QueryParam`, `RequiredQueryParam`, `HeaderParam`, `CookieParam` — all return a `Parameter` ready for `Endpoint.Parameters`.
+- **Auth scheme helpers:** `BearerAuth(name)`, `APIKeyAuth(name, header)`, `APIKeyQueryAuth(name, param)`, `BasicAuth(name)`, `CookieAuth(name, cookieName)` — all return an `AuthScheme` for registration via `Config.Auth.Schemes`.
+- **Config surface:** `Config.Auth AuthConfig` (with `PersistCredentials` and `Schemes` fields) plus the `AuthScheme` struct. The new `SecurityCookieAuth` constant joins the existing `Security*` family for the predefined-name shortcut.
+
+### Migrating from v1.1.1
+
+- Replace bare `openswag.Response{...}` literals with `openswag.Response("desc", Schema{})` or `openswag.ResponseSpec{...}`. Literals inside `openswag.Responses{ ... }` (or the equivalent typed map) continue to compile via Go's composite-literal type inference.
+- If you were referencing custom security scheme names from `Endpoint.Security` and relying on them magically becoming `http-bearer`, register them explicitly:
+
+  ```go
+  Auth: openswag.AuthConfig{
+      Schemes: []openswag.AuthScheme{
+          openswag.BearerAuth(openswag.SecurityBearerAuth),
+          openswag.APIKeyAuth("apiKey", "X-API-Key"),
+      },
+  },
+  ```
+
+- File-upload endpoints that previously had a `ContentType: "multipart/form-data"` set on `RequestBody` will now produce a different spec than before — review your generated `openapi.json` and update downstream clients/code generators accordingly.
+
 ## v1.1.1
 
 Cleaner specs out of the box. Examples are now opt-in: you only see them where you ask for them, and `null` is supported as a first-class example value. Fully backwards-compatible — no API signatures changed.
