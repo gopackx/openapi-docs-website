@@ -57,16 +57,6 @@ Restart Claude Code, then ask: *"Do you have an open-swag-go skill available?"* 
 
 ---
 
-## Why a Skill (and not an MCP server)
-
-A common follow-up question: *"Should there also be an MCP server for open-swag-go, like go-audit has?"*
-
-Short answer: no. An OpenAPI spec is a **static file that's small enough to fit in the model's context** — Claude can read `openapi.json` directly with its built-in file tool and answer "summarize this", "list every POST", "what does `GET /users/{id}` accept" without any extra service in the loop. The value an MCP server adds for go-audit (live, multi-million-row data that doesn't fit in context) just doesn't apply here.
-
-The Skill, on the other hand, fills a genuine gap: the assistant's training data won't reflect the latest API surface or the pre-v1.2.0 pitfalls. That guidance has nowhere else to come from.
-
----
-
 ## Source
 
 - [Skill file on GitHub](https://github.com/gopackx/open-swag-go/blob/master/skills/open-swag-go/SKILL.md)
