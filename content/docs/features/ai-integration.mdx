@@ -1,0 +1,72 @@
+---
+title: AI Integration
+description: Claude Skill shipped with open-swag-go so AI coding assistants integrate the library correctly on a cold project.
+---
+
+# AI Integration
+
+open-swag-go ships a **Claude Skill** at `skills/open-swag-go/SKILL.md` that teaches AI coding assistants (Claude Code, Claude.ai Desktop, Cursor, …) how to integrate the library correctly. It's the difference between Claude hallucinating an outdated API surface and Claude writing code that compiles against `v1.2.0` on the first try.
+
+The Skill is plain Markdown with YAML frontmatter — no runtime, no binary, no extra services. Drop the file in the right folder and Claude Code picks it up.
+
+---
+
+## What the Skill covers
+
+The Skill activates whenever your prompt looks like an open-swag-go integration — phrases like *"add OpenAPI docs to my Go service"*, *"set up Swagger UI for Gin"*, or *"generate a spec from these DTO structs"*. Once active it walks the assistant through:
+
+- **Step 0** — fit check. When to *not* recommend open-swag-go (e.g. annotation-comment scanning → `swaggo/swag`, runtime validation → `kin-openapi`).
+- **Step 1** — install with `@v1.2.0` pinned. Earlier releases have four runtime bugs that produce wrong specs.
+- **Step 2** — `Config` construction with `Info`, `Servers`, `Tags`, `UI`, and `Auth.Schemes`.
+- **Step 3** — endpoint definition using the decorator-style helpers (`Body`, `BodyWithDesc`, `FormBody`, `Response`, `Responses`, `PathParam`/`QueryParam`/`HeaderParam`, struct-driven `QueryParams`/`PathParams`).
+- **Step 4** — mount on `net/http`, Chi, Gin, Echo, or Fiber.
+- **Step 5** — export `openapi.json` for the frontend (openapi-typescript / openapi-fetch / orval).
+- **Step 6** — version-diff in CI using `pkg/versioning`.
+- **11 common pitfalls** — every fixed bug since v1.0.0, with the symptom and the fix.
+- **Quick-start checklist** — 7 decisions to confirm with the user before writing code.
+
+---
+
+## Installing the Skill
+
+### Per-user (recommended)
+
+Fetch the file directly from the repo:
+
+```bash
+mkdir -p ~/.claude/skills/open-swag-go
+curl -fsSL https://raw.githubusercontent.com/gopackx/open-swag-go/master/skills/open-swag-go/SKILL.md \
+  -o ~/.claude/skills/open-swag-go/SKILL.md
+```
+
+### Per-project
+
+Copy from the version pinned in your `go.mod` so the Skill matches the API surface your project is actually using:
+
+```bash
+mkdir -p .claude/skills/open-swag-go
+cp $(go env GOMODCACHE)/github.com/gopackx/open-swag-go@v1.2.0/skills/open-swag-go/SKILL.md \
+   .claude/skills/open-swag-go/SKILL.md
+```
+
+(Adjust the version pin to match your `go.mod`.)
+
+### Confirm it loaded
+
+Restart Claude Code, then ask: *"Do you have an open-swag-go skill available?"* The reply should reference `skills/open-swag-go` with the v1.2.0-aware trigger description.
+
+---
+
+## Why a Skill (and not an MCP server)
+
+A common follow-up question: *"Should there also be an MCP server for open-swag-go, like go-audit has?"*
+
+Short answer: no. An OpenAPI spec is a **static file that's small enough to fit in the model's context** — Claude can read `openapi.json` directly with its built-in file tool and answer "summarize this", "list every POST", "what does `GET /users/{id}` accept" without any extra service in the loop. The value an MCP server adds for go-audit (live, multi-million-row data that doesn't fit in context) just doesn't apply here.
+
+The Skill, on the other hand, fills a genuine gap: the assistant's training data won't reflect the latest API surface or the pre-v1.2.0 pitfalls. That guidance has nowhere else to come from.
+
+---
+
+## Source
+
+- Skill file on GitHub: <https://github.com/gopackx/open-swag-go/blob/master/skills/open-swag-go/SKILL.md>

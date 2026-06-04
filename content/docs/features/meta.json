@@ -10,6 +10,7 @@
     "schema-generation",
     "theming",
     "docs-auth",
-    "example-generator"
+    "example-generator",
+    "ai-integration"
   ]
 }
